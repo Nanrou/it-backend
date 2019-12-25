@@ -50,3 +50,8 @@ class InvalidOriginPasswordResponse(ErrcodeABC):
 class RepetitionUserResponse(ErrcodeABC):
     errcode = 100005
     errmsg = '该用户已存在'
+
+
+class MissRequiredFields(ErrcodeABC):
+    errcode = 100005
+    errmsg = '缺失必要参数'
