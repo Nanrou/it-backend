@@ -52,6 +52,21 @@ class RepetitionUserResponse(ErrcodeABC):
     errmsg = '该用户已存在'
 
 
-class MissRequiredFields(ErrcodeABC):
+class MissRequiredFieldsResponse(ErrcodeABC):
     errcode = 100005
     errmsg = '缺失必要参数'
+
+
+class MissComputerHardwareResponse(ErrcodeABC):
+    errcode = 100006
+    errmsg = '该电脑无相关硬件信息'
+
+
+class InvalidFormFIELDSResponse(ErrcodeABC):
+    errcode = 100007
+    errmsg = '表单字段错误'
+
+
+class RepetitionHardwareResponse(ErrcodeABC):
+    errcode = 100008
+    errmsg = '该硬件信息已存在'

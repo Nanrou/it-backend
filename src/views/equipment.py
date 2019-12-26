@@ -1,20 +1,48 @@
+from datetime import datetime
+from io import BytesIO
+
 from aiohttp.web import Request, Response
+from pymysql.err import IntegrityError
 
 from src.meta.permission import Permission
-from src.meta.response_code import ResponseOk, MissRequiredFields
+from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, MissComputerHardwareResponse, \
+    InvalidFormFIELDSResponse, RepetitionHardwareResponse
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import set_cache_version, get_cache_version
+from src.utls.common import set_cache_version, get_cache_version, get_qrcode
 
 routes = PrefixRouteTableDef('/api/equipment')
 
+PAGE_SIZE = 10
 KEY_OF_VERSION = 'equipment'
+EQUIPMENT_FIELDS = {
+    'category',
+    'brand',
+    'model_number',
+    'serial_number',
+    'price',
+    'purchasing_time',
+    'guarantee',
+    'remark',
+    'status',
+    'user',
+    'admin',
+    'department',
+    'edit',
+}
+HARDWARE_FIELDS = {
+    # 'eid',
+    'ipAddress': 'ip_address',
+    'cpu': 'cpu',
+    'gpu': 'gpu',
+    'disk': 'disk',
+    'memory': 'memory',
+    'mainBoard': 'main_board',
+    'remark': 'remark',
+}
 
 
 def get_equipment_id(request: Request):
     return get_query_params(request, 'eid')
-
-
-PAGE_SIZE = 10
 
 
 @routes.get('/query')
@@ -25,7 +53,7 @@ async def query(request: Request):
     try:
         page = int(request.query.get('page')) or 1
     except ValueError:
-        return code_response(MissRequiredFields)
+        return code_response(MissRequiredFieldsResponse)
 
     cmd = "SELECT * FROM equipment"
     filter_params = []
@@ -38,8 +66,8 @@ async def query(request: Request):
 
     # 对过滤项进行组合处理
     for type_, col_format in zip(
-        ['department', 'equipment', 'status'],
-        ['department="{}"', 'category="{}"', 'status={}']
+            ['department', 'equipment', 'status'],
+            ['department="{}"', 'category="{}"', 'status={}']
     ):
         if request.query.get(type_):
             _tmp = []
@@ -68,7 +96,7 @@ async def query(request: Request):
         filter_part = ' WHERE ' + filter_part
 
     # 翻页逻辑
-    cmd = cmd + filter_part + ' limit {}, {}'.format((page-1) * PAGE_SIZE, PAGE_SIZE)
+    cmd = cmd + filter_part + ' limit {}, {}'.format((page - 1) * PAGE_SIZE, PAGE_SIZE)
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -128,3 +156,247 @@ async def query_options(request: Request):
             await conn.commit()
 
     return code_response(ResponseOk, res)
+
+
+@routes.post('/add')
+async def create(request: Request):
+    data = await request.json()
+    cmd = """\
+INSERT INTO equipment (
+    category,
+    brand,
+    model_number,
+    serial_number,
+    price,
+    purchasing_time,
+    guarantee,
+    remark,
+    status,
+    user,
+    `owner`,
+    department,
+    `edit`
+) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)\
+"""
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            _edit = request['jwt_content'].get('name')
+            await cur.execute(cmd, (
+                data.get('category'),
+                data.get('brand'),
+                data.get('modelNumber'),
+                data.get('serialNumber'),
+                data.get('price'),
+                data.get('purchasingTime'),
+                data.get('guarantee'),
+                data.get('remark'),
+                data.get('status'),
+                data.get('user'),
+                data.get('admin'),
+                data.get('department'),
+                _edit,
+            ))
+
+            _eid = cur.lastrowid
+            _content = '{} {} 创建了设备编号为 {} 的设备记录'.format(
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'), _edit, _eid
+            )
+            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                              (_eid, _content, _edit))
+            if data.get('category') == '台式电脑' and data.get('detail'):
+                _detail = data.get('detail')
+                _cmd = """\
+INSERT INTO computer_detail (
+    eid,
+    ip_address,
+    cpu,
+    gpu,
+    disk,
+    `memory`,
+    main_board,
+    remark
+) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)\
+"""
+                await cur.execute(_cmd, (
+                    _eid,
+                    _detail.get('ipAddress'),
+                    _detail.get('cpu'),
+                    _detail.get('gpu'),
+                    _detail.get('disk'),
+                    _detail.get('memory'),
+                    _detail.get('main_board'),
+                    _detail.get('remark')
+                ))
+
+            await conn.commit()
+    await set_cache_version(request, KEY_OF_VERSION)
+    return code_response(ResponseOk)
+
+
+@routes.patch('/update')
+async def update(request: Request):  # data {key: [new, old]}
+    _eid = get_equipment_id(request)
+
+    data = await request.json()
+    try:
+        assert all(field in EQUIPMENT_FIELDS for field in data)
+    except AssertionError:
+        return code_response(InvalidFormFIELDSResponse)
+
+    _edit = request['jwt_content'].get('name')
+    fields = tuple(data.keys())
+    cmd = "UPDATE equipment SET {}, `edit`=%s WHERE id=%s".format(','.join([f'`{field}`=%s' for field in fields]))
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(cmd, [data[field][0] for field in fields] + [_edit, _eid])
+            _content = '{} {} 修改了设备编号为 {} 的设备记录：{}'.format(
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'), _edit, _eid,
+                ', '.join(['{category}: {old} => {_new}'.format(category=field, old=data[field][1], _new=data[field][0])
+                           for field in fields])
+            )
+            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                              (_eid, _content, _edit))
+
+            await conn.commit()
+    await set_cache_version(request, KEY_OF_VERSION)
+    return code_response(ResponseOk)
+
+
+@routes.patch('/scrap')
+async def scrap(request: Request):
+    _eid = get_equipment_id(request)
+
+    _edit = request['jwt_content'].get('name')
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE equipment SET status=3, edit=%s WHERE id=%s",
+                              (_edit, _eid))
+            _content = '{} {} 报废了设备编号为 {} 的设备'.format(
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'), _edit, _eid
+            )
+            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                              (_eid, _content, _edit))
+
+            await conn.commit()
+    await set_cache_version(request, KEY_OF_VERSION)
+    return code_response(ResponseOk)
+
+
+@routes.delete('/remove')
+async def delete(request: Request):
+    _eid = get_equipment_id(request)
+
+    _edit = request['jwt_content'].get('name')
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE equipment SET del_flag=1, edit=%s WHERE id=%s",
+                              (_edit, _eid))
+            _content = '{} {} 删除了设备编号为 {} 的设备记录'.format(
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'), _edit, _eid
+            )
+            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                              (_eid, _content, _edit))
+
+            await conn.commit()
+    await set_cache_version(request, KEY_OF_VERSION)
+    return code_response(ResponseOk)
+
+
+@routes.get('/qrcode')
+async def equipment_qrcode(request: Request):
+    qr_io = BytesIO()
+    get_qrcode(get_equipment_id(request)).save(qr_io)
+    return Response(body=qr_io.getvalue(), headers={'Content-Type': 'image/png'})
+
+
+@routes.get('/hardware')
+async def query_hardware(request: Request):
+    _eid = get_equipment_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM computer_detail WHERE eid=%s", (_eid,))
+            try:
+                row = await cur.fetchone()
+                data = {
+                    # 'hid': row[0],
+                    # 'eid': row[1],
+                    'ipAddress': row[2],
+                    'cpu': row[3],
+                    'gpu': row[4],
+                    'disk': row[5],
+                    'memory': row[6],
+                    'mainBoard': row[7],
+                    'remark': row[8]
+                }
+            except (IndexError, TypeError):
+                return code_response(MissComputerHardwareResponse)
+            finally:
+                await conn.commit()
+    return code_response(ResponseOk, data)
+
+
+@routes.post('/hardware')
+async def create_hardware(request: Request):
+    _eid = get_equipment_id(request)
+    data = await request.json()
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            _cmd = """\
+    INSERT INTO computer_detail (
+        eid,
+        ip_address,
+        cpu,
+        gpu,
+        disk,
+        `memory`,
+        main_board,
+        remark
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)\
+    """
+            try:
+                await cur.execute(_cmd, (
+                    _eid,
+                    data.get('ipAddress'),
+                    data.get('cpu'),
+                    data.get('gpu'),
+                    data.get('disk'),
+                    data.get('memory'),
+                    data.get('main_board'),
+                    data.get('remark')
+                ))
+            except IntegrityError:
+                return code_response(RepetitionHardwareResponse)
+            finally:
+                await conn.commit()
+    return code_response(ResponseOk)
+
+
+@routes.patch('/hardware')
+async def update_hardware(request: Request):  # data {key: [new, old]}
+    _eid = get_equipment_id(request)
+    data = await request.json()
+    try:
+        assert all(field in HARDWARE_FIELDS for field in data)
+    except AssertionError:
+        return code_response(InvalidFormFIELDSResponse)
+    fields = tuple(data.keys())
+
+    _edit = request['jwt_content'].get('name')
+    cmd = "UPDATE computer_detail SET {} WHERE eid=%s".format(','.join([f'`{HARDWARE_FIELDS[field]}`=%s' for field in fields]))
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(cmd, [data[field][0] for field in fields] + [_eid])
+            _content = '{} {} 修改了设备编号为 {} 的硬件配置：{}'.format(
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'), _edit, _eid,
+                ', '.join(['{category}: {old} => {_new}'.format(category=HARDWARE_FIELDS[field], old=data[field][1],
+                                                                _new=data[field][0]) for field in fields])
+            )
+            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                              (_eid, _content, _edit))
+            await conn.commit()
+    return code_response(ResponseOk)
+
+# todo 前端 qr code

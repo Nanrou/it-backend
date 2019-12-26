@@ -1,8 +1,11 @@
 from collections import namedtuple
 from datetime import datetime, timedelta
+import socket
+import platform
 
 from aiohttp.web import Request
 from jwt import encode as jwt_encode
+from qrcode import make as qrcode_make
 from werkzeug.security import check_password_hash
 
 CACHE_EXPIRE_TIME = 15 * 60
@@ -82,3 +85,27 @@ async def get_cache_version(request: Request, key: str):
                                        value=str(int(datetime.now().timestamp() * 1000)),
                                        expire=CACHE_EXPIRE_TIME)
         return await request.app['redis'].get(_key)
+
+
+def get_host_ip():
+    """ 获取本机ip """
+    _s = None
+    try:
+        _s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        _s.connect(('8.8.8.8', 80))
+        ip = _s.getsockname()
+    finally:
+        if _s:
+            _s.close()
+    return ip[0]
+
+
+if platform.system() == 'Darwin':
+    HOST = '{}:8082'.format(get_host_ip())
+else:
+    HOST = 'mobile.it.aquazhuhai.com'
+
+
+def get_qrcode(eid):
+    """ 生成二维码 """
+    return qrcode_make('http://{}/query?eid={}'.format(HOST, eid), box_size=5)
