@@ -39,6 +39,11 @@ HARDWARE_FIELDS = {
     'mainBoard': 'main_board',
     'remark': 'remark',
 }
+StatusText = {
+    0: "正常",
+    2: "备用",
+    3: "报废"
+}
 
 
 def get_equipment_id(request: Request):
@@ -305,6 +310,38 @@ async def delete(request: Request):
     return code_response(ResponseOk)
 
 
+@routes.patch('/changeStatus')
+async def change_status(request: Request):
+    _eid = get_equipment_id(request)
+
+    _edit = request['jwt_content'].get('name')
+
+    try:
+        data = await request.json()
+        if data['status'] == 0:
+            cmd = "UPDATE equipment SET status=0, user=%s, owner=%s, department=%s, edit=%s WHERE id=%s"
+            params = (data['user'], data['owner'], data['department'], _edit, _eid)
+        elif data['status'] in (2, 3):
+            cmd = f"UPDATE equipment SET status={data['status']}, user='', owner='', department='', edit=%s WHERE id=%s"
+            params = (_edit, _eid)
+        else:
+            return code_response(InvalidFormFIELDSResponse)
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(cmd, params)
+                _content = '{} {} 将设备编号为 {} 的设备设置为 {} 状态'.format(
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'), _edit, _eid, StatusText[data['status']]
+                )
+                await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                                  (_eid, _content, _edit))
+
+                await conn.commit()
+        await set_cache_version(request, KEY_OF_VERSION)
+        return code_response(ResponseOk)
+    except KeyError:
+        return code_response(InvalidFormFIELDSResponse)
+
+
 @routes.get('/qrcode')
 async def equipment_qrcode(request: Request):
     qr_io = BytesIO()
@@ -399,4 +436,3 @@ async def update_hardware(request: Request):  # data {key: [new, old]}
             await conn.commit()
     return code_response(ResponseOk)
 
-# todo 前端 qr code
