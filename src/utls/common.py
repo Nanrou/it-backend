@@ -109,3 +109,11 @@ else:
 def get_qrcode(eid):
     """ 生成二维码 """
     return qrcode_make('http://{}/query?eid={}'.format(HOST, eid), box_size=5)
+
+
+async def send_sms(phone):
+    pass
+
+
+async def check_captcha(request: Request, phone: str, captcha: str) -> bool:
+    return True

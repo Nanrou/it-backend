@@ -70,3 +70,19 @@ class InvalidFormFIELDSResponse(ErrcodeABC):
 class RepetitionHardwareResponse(ErrcodeABC):
     errcode = 100008
     errmsg = '该硬件信息已存在'
+
+
+class InvalidCaptchaResponse(ErrcodeABC):
+    errcode = 100009
+    errmsg = '验证码错误'
+
+
+class ConflictStatusResponse(ErrcodeABC):
+    errcode = 100010
+    errmsg = '请检查设备状态'
+
+
+class RepetitionOrderIdResponse(ErrcodeABC):
+    errcode = 1000011
+    errmsg = 'OrderId重复，请稍后尝试'
+

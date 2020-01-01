@@ -223,4 +223,6 @@ class OrderHistory(ModelBase):
 
 
 if __name__ == '__main__':
+    MySQL_DB.drop_tables([WorkOrder, OrderHistory])
+    MySQL_DB.create_tables([WorkOrder, OrderHistory])
     pass

@@ -56,7 +56,7 @@ async def query(request: Request):
     # 判断root，且不做304
 
     try:
-        page = int(request.query.get('page')) or 1
+        page = int(request.query.get('page')) if request.query.get('page') else 1
     except ValueError:
         return code_response(MissRequiredFieldsResponse)
 
@@ -436,3 +436,30 @@ async def update_hardware(request: Request):  # data {key: [new, old]}
             await conn.commit()
     return code_response(ResponseOk)
 
+
+@routes.get('/detail')
+async def equipment_detail(request: Request):
+    _eid = get_equipment_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM equipment WHERE `id`=%s", (_eid,))
+            row = await cur.fetchone()
+            res = {
+                'eid': ItHashids.encode(row[0]),
+                'category': row[1],
+                'brand': row[2],
+                'modelNumber': row[3],
+                'serialNumber': row[4],
+                'price': row[5],
+                'purchasingTime': row[6].strftime('%Y-%m-%d'),
+                'guarantee': row[7],
+                'remark': row[8],
+                'status': row[9],
+                'user': row[10],
+                'owner': row[11],
+                'department': row[12],
+                'edit': row[13],
+                'del_flag': row[14],
+            }
+            await conn.commit()
+    return code_response(ResponseOk, res)
