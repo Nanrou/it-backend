@@ -139,7 +139,7 @@ async def get_order_id(request: Request):
     if order_id is None:
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT COUNT(*) FROM {} WHERE order_id LIKE '{}'".format(TABLE_NAME, _date_str))
+                await cur.execute("SELECT COUNT(*) FROM {} WHERE order_id LIKE '{}%'".format(TABLE_NAME, _date_str))
                 order_id = await cur.fetchone()
                 await conn.commit()
         order_id = order_id[0]
@@ -175,7 +175,7 @@ async def report_order(request: Request):
         _data = await request.json()
         _eid = ItHashids.decode(_data['eid'])
         _report_form = _data['reportForm']
-        assert all(k in _report_form for k in REPORT_FORM_FIELDS)
+        assert all(k in REPORT_FORM_FIELDS for k in _report_form)
     except (KeyError, AssertionError):
         return code_response(InvalidFormFIELDSResponse)
     _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -184,7 +184,8 @@ async def report_order(request: Request):
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
                 # 确认设备状态为正常
-                await cur.execute("SELECT `department`, `category` FROM equipment WHERE `id`=%s AND `status`=0", (_eid,))
+                await cur.execute("SELECT `department`, `category` FROM equipment WHERE `id`=%s AND `status`=0",
+                                  (_eid,))
                 if cur.rowcount == 0:
                     return code_response(ConflictStatusResponse)
                 else:
@@ -214,7 +215,8 @@ async def report_order(request: Request):
                         return code_response(RepetitionOrderIdResponse)
                     _last_row_id = cur.lastrowid
                     await cur.execute(H_CMD, (
-                        _last_row_id, 'R', _report_form['name'], _report_form['phone'], _report_form['remark'], _content))
+                        _last_row_id, 'R', _report_form['name'], _report_form['phone'], _report_form.get('remark'),
+                        _content))
                     # 更新equipment
                     # await cur.execute("UPDATE equipment SET oid=%s, status=1, edit=%s WHERE id=%s",
                     #                   (_last_row_id, _edit, _eid))
@@ -281,3 +283,6 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
                                _edit))
             await conn.commit()
     return code_response(ResponseOk)
+
+# todo check request data after remote handle
+#
