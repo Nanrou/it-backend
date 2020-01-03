@@ -1,5 +1,4 @@
 from datetime import datetime
-from io import BytesIO
 
 from aiohttp.web import Request, Response
 from pymysql.err import IntegrityError
@@ -284,5 +283,19 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
             await conn.commit()
     return code_response(ResponseOk)
 
-# todo check request data after remote handle
-#
+
+@routes.get('/flow')
+async def get_flow(request: Request):
+    """ 获取工作流 """
+    _oid = get_maintenance_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT status, content FROM `order_history` WHERE oid=%s", (_oid,))
+            res = []
+            for row in await cur.fetchall():
+                res.append({
+                    'status': row[0],
+                    'content': row[1]
+                })
+            await conn.commit()
+    return code_response(ResponseOk, res)
