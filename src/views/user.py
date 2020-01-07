@@ -2,17 +2,19 @@ from datetime import datetime, timedelta
 from re import match
 
 from aiohttp.web import json_response, Response, Request
-from aiohttp.web_exceptions import HTTPForbidden
 from jwt import encode as jwt_encode
 from pymysql.err import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.meta.permission import Permission
-from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidOriginPasswordResponse, RepetitionUserResponse
+from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidOriginPasswordResponse, \
+    RepetitionUserResponse
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
 from src.utls.common import verify_login
 
 routes = PrefixRouteTableDef('/api/user')
+USER_FORM_FIELDS = {'workNumber': 'work_number', 'name': 'name', 'phone': 'phone', 'role': 'role',
+                    'department': 'department', 'username': 'username'}
 
 
 @routes.post('/login')
@@ -172,7 +174,7 @@ password_hash
             try:
                 await cur.execute(cmd, (
                     data.get('username'),
-                    data.get('number'),
+                    data.get('workNumber'),
                     data.get('name'),
                     data.get('department'),
                     data.get('role'),
@@ -204,3 +206,32 @@ async def dispatch_query(request: Request):
             await conn.commit()
     return code_response(ResponseOk, data)
 
+
+@routes.patch('/update')
+async def update_user(request: Request):
+    _uid = get_user_id(request)
+    data = await request.json()
+    cmd = """\
+UPDATE profile SET 
+    username=%s,
+    work_number=%s,
+    name=%s,
+    department=%s,
+    phone=%s,
+    role=%s
+WHERE id=%s
+"""
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(cmd, (
+                data.get("username"),
+                data.get('workNumber'),
+                data.get('name'),
+                data.get('department'),
+                data.get('phone'),
+                data.get('role'),
+                _uid
+            ))
+            await conn.commit()
+
+    return code_response(ResponseOk)

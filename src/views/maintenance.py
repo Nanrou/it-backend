@@ -113,7 +113,6 @@ async def query_options(request: Request):
                         'value': row[0]
                     })
             await conn.commit()
-
     return code_response(ResponseOk, res)
 
 

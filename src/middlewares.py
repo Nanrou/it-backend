@@ -17,17 +17,18 @@ from src.meta.response_code import InvalidTokenResponse, RepetitionLoginResponse
 WITHOUT_VERIFY = [
     ('/api/user/login', 'POST'),
     # 以下都是为移动端服务的
-    ('/api/order', 'POST'),
-    ('/api/equipment', 'GET'),
-    ('/api/captcha', 'GET'),
-    ('/api/order/special-captcha', 'GET'),
-    ('/api/order', 'GET'),
-    ('/api/order/arrival', 'PATCH'),
-    ('/api/order/handle', 'PATCH'),
-    ('/api/order/appraisal', 'PATCH'),
-    ('/api/order/cancel', 'PATCH'),
-    ('/api/history-order-wap', 'GET'),
-    ('/api/order-flow-wap', 'GET'),
+    ('/api/maintenance/report', 'POST'),
+    # ('/api/order', 'POST'),
+    # ('/api/equipment', 'GET'),
+    # ('/api/captcha', 'GET'),
+    # ('/api/order/special-captcha', 'GET'),
+    # ('/api/order', 'GET'),
+    # ('/api/order/arrival', 'PATCH'),
+    # ('/api/order/handle', 'PATCH'),
+    # ('/api/order/appraisal', 'PATCH'),
+    # ('/api/order/cancel', 'PATCH'),
+    # ('/api/history-order-wap', 'GET'),
+    # ('/api/order-flow-wap', 'GET'),
 ]
 
 MODULE_PERMISSION = {
