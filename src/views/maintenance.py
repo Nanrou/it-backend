@@ -76,7 +76,7 @@ async def query(request: Request):
                     'oid': ItHashids.encode(row[0]),
                     'orderId': row[1],
                     'status': row[2],
-                    'pid': row[3],
+                    'pid': ItHashids.encode(row[3]) if row[3] else row[3],
                     'name': row[4],
                     'eid': ItHashids.encode(row[5]),
                     'equipment': row[6],
@@ -164,6 +164,23 @@ INSERT INTO order_history (
     content
 ) VALUES (%s, %s, %s, %s, %s, %s)\
 """
+
+
+@routes.get('/flow')
+async def get_flow(request: Request):
+    """ 获取工作流 """
+    _oid = get_maintenance_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT status, content FROM `order_history` WHERE oid=%s", (_oid,))
+            res = []
+            for row in await cur.fetchall():
+                res.append({
+                    'status': row[0],
+                    'content': row[1]
+                })
+            await conn.commit()
+    return code_response(ResponseOk, res)
 
 
 # 这是针对移动端未登录的
@@ -283,18 +300,34 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
     return code_response(ResponseOk)
 
 
-@routes.get('/flow')
-async def get_flow(request: Request):
-    """ 获取工作流 """
+@routes.patch('/dispatch')
+async def dispatch(request: Request):  # data { worker: {pid, name}, orderId, remark }
+    """ R -> D 派单 """
     _oid = get_maintenance_id(request)
+    data = await request.json()
+
+    _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        _worker = data['worker']
+        _pid = ItHashids.decode(_worker['pid'])
+        _edit = request['jwt_content'].get('name')
+        _phone = request['jwt_content'].get('pho')
+        _content = "{time} {name} 将 {order_id} 号工单分派给了 {worker}".format(
+            time=_time_str, name=_edit, phone=_phone, order_id=data['orderId'],
+            worker=_worker['name']
+        )
+    except KeyError:
+        return code_response(InvalidFormFIELDSResponse)
+
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT status, content FROM `order_history` WHERE oid=%s", (_oid,))
-            res = []
-            for row in await cur.fetchall():
-                res.append({
-                    'status': row[0],
-                    'content': row[1]
-                })
+            # 更新order
+            m_cmd = "UPDATE `order` SET status='D', pid=%s, name=%s, content=%s WHERE id=%s"
+            await cur.execute(m_cmd, (_pid, _worker['name'], _content, _oid))
+            await cur.execute(H_CMD, (_oid, 'D', _worker['name'], None, data.get('remark'), _content))
+            # 应该在history中记录被指派人的信息
             await conn.commit()
-    return code_response(ResponseOk, res)
+
+    await set_cache_version(request, 'order')
+    return code_response(ResponseOk)
+
