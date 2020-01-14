@@ -1,11 +1,13 @@
 from datetime import datetime
+from json import JSONDecodeError
 
 from aiohttp.web import Request, Response
 from pymysql.err import IntegrityError
 
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, ConflictStatusResponse, \
-    InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse
+    InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse
+from src.views.equipment import get_equipment_id
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
 from src.utls.common import set_cache_version, get_cache_version, get_qrcode, send_sms, check_captcha
 
@@ -15,8 +17,12 @@ PAGE_SIZE = 10
 KEY_OF_VERSION = 'maintenance'
 TABLE_NAME = '`order`'
 ORDER_ID_EXPIRE_TIME = 60 * 60 * 24  # 记录当天的条数 order id 的过期时间，就是一天
-REPORT_FORM_FIELDS = {'workNumber': 'work_number', 'name': 'name', 'phone': 'phone', 'reason': 'reason',
-                      'remark': 'remark', 'captcha': 'captcha'}
+# REPORT_FORM_FIELDS = {'name': 'name', 'phone': 'phone', 'reason': 'reason',
+#                       'remark': 'remark', 'captcha': 'captcha'}
+# APPRAISAL_FORM_FIELDS = {'name': 'name', 'phone': 'phone', 'rank': 'rank',
+#                          'remark': 'remark', 'captcha': 'captcha'}
+REPORT_FORM_FIELDS = {'name', 'phone', 'reason', 'remark', 'captcha'}
+APPRAISAL_FORM_FIELDS = {'name', 'phone', 'rank', 'remark', 'captcha'}
 REMOTE_HANDLE_FIELDS = {'eid', 'method', 'remark'}
 MAINTENANCE_STATUS = 1
 
@@ -39,7 +45,7 @@ async def query(request: Request):
     # 对过滤项进行组合处理
     for type_, col_format in zip(
             ['department', 'equipment', 'status'],
-            ['department="{}"', 'category="{}"', 'status={}']
+            ['department="{}"', 'category="{}"', 'status="{}"']  # 注意这里，equipment的status是int，maintenance是string
     ):
         if request.query.get(type_):
             _tmp = []
@@ -58,7 +64,8 @@ async def query(request: Request):
         filter_part = ' WHERE ' + filter_part
 
     # 翻页逻辑
-    cmd = cmd + filter_part + ' limit {}, {}'.format((page - 1) * PAGE_SIZE, PAGE_SIZE)
+    cmd += filter_part
+    cmd += ' ORDER BY id DESC' + ' limit {}, {}'.format((page - 1) * PAGE_SIZE, PAGE_SIZE)
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -191,7 +198,7 @@ async def report_order(request: Request):
         _eid = ItHashids.decode(_data['eid'])
         _report_form = _data['reportForm']
         assert all(k in REPORT_FORM_FIELDS for k in _report_form)
-    except (KeyError, AssertionError):
+    except (KeyError, AssertionError, JSONDecodeError):
         return code_response(InvalidFormFIELDSResponse)
     _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -262,6 +269,9 @@ async def get_captcha(request: Request):
     pass
 
 
+# async def handle_status(action: str, )
+
+
 @routes.patch('/remote')
 async def remote_handle(request: Request):  # data {eid, method, remark}
     """ R -> E 远程解决问题 """
@@ -283,7 +293,7 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
         async with conn.cursor() as cur:
             # todo 将更新状态抽象出来
             # 更新order
-            m_cmd = "UPDATE `order` SET status='E', pid=%s, name=%s, content=%s WHERE id=%s AND status='R'"
+            m_cmd = f"UPDATE {TABLE_NAME} SET status='E', pid=%s, name=%s, content=%s WHERE id=%s AND status='R'"
             await cur.execute(m_cmd, (_pid, _edit, _content, _oid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
@@ -294,14 +304,14 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
             await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, f"{data['method']}|{data['remark']}", _content))
             await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
                               (_eid,
-                               '{} {} 修复了编号为 {} 的设备故障'.format(_time_str, _edit, _eid),
+                               '{} {} 修复设备故障'.format(_time_str, _edit),
                                _edit))
             await conn.commit()
     return code_response(ResponseOk)
 
 
 @routes.patch('/dispatch')
-async def dispatch(request: Request):  # data { worker: {pid, name}, orderId, remark }
+async def dispatch(request: Request):  # data { worker: {pid, name}, remark }
     """ R -> D 派单 """
     _oid = get_maintenance_id(request)
     data = await request.json()
@@ -311,23 +321,152 @@ async def dispatch(request: Request):  # data { worker: {pid, name}, orderId, re
         _worker = data['worker']
         _pid = ItHashids.decode(_worker['pid'])
         _edit = request['jwt_content'].get('name')
-        _phone = request['jwt_content'].get('pho')
-        _content = "{time} {name} 将 {order_id} 号工单分派给了 {worker}".format(
-            time=_time_str, name=_edit, phone=_phone, order_id=data['orderId'],
-            worker=_worker['name']
+        _content = "{time} {name} 将工单分派给了 {worker}".format(
+            time=_time_str, name=_edit, worker=_worker['name']
         )
     except KeyError:
         return code_response(InvalidFormFIELDSResponse)
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
+            # todo 将更新状态抽象出来
             # 更新order
-            m_cmd = "UPDATE `order` SET status='D', pid=%s, name=%s, content=%s WHERE id=%s"
+            m_cmd = f"UPDATE {TABLE_NAME} SET status='D', pid=%s, name=%s, content=%s WHERE id=%s AND status='R'"
             await cur.execute(m_cmd, (_pid, _worker['name'], _content, _oid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
             await cur.execute(H_CMD, (_oid, 'D', _worker['name'], None, data.get('remark'), _content))
             # 应该在history中记录被指派人的信息
             await conn.commit()
 
-    await set_cache_version(request, 'order')
     return code_response(ResponseOk)
 
+
+@routes.patch('/arrival')
+async def arrival(request: Request):  # data { name, phone, remark }
+    """ D -> H 到达现场并开始处理 """
+    _oid = get_maintenance_id(request)
+    data = await request.json()
+
+    _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        _edit = data['name']
+        _phone = data['phone']
+        _content = "{time} {name}({phone}) 到达现场进行处理".format(
+            time=_time_str, name=_edit, phone=_phone,
+        )
+    except KeyError:
+        return code_response(InvalidFormFIELDSResponse)
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            # 校验预留信息
+            o_cmd = f"SELECT pid FROM {TABLE_NAME} WHERE id=%s"
+            await cur.execute(o_cmd, (_oid,))
+            if cur.rowcount == 0:
+                return code_response(InvalidWorkerInformationResponse)
+            row = await cur.fetchone()
+            try:
+                p_cmd = "SELECT name, phone FROM `profile` WHERE id=%s"
+                await cur.execute(p_cmd, (row[0],))
+                if cur.rowcount == 0:
+                    return code_response(InvalidWorkerInformationResponse)
+                row = await cur.fetchone()
+                if row[0] != _edit or row[1] != _phone:
+                    return code_response(InvalidWorkerInformationResponse)
+            except IndexError:
+                return code_response(InvalidWorkerInformationResponse)
+            # 更新order
+            m_cmd = f"UPDATE {TABLE_NAME} SET status='H', content=%s WHERE id=%s AND status='D'"
+            await cur.execute(m_cmd, (_content, _oid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            await cur.execute(H_CMD, (_oid, 'H', _edit, _phone, data.get('remark'), _content))
+            await conn.commit()
+
+    return code_response(ResponseOk)
+
+
+@routes.patch('/fix')
+async def fix(request: Request):  # data { name, phone, remark }
+    """ H -> E 到达现场并开始处理 """
+    _oid = get_maintenance_id(request)
+    _eid = get_equipment_id(request)
+    data = await request.json()
+
+    _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        _edit = data['name']
+        _phone = data['phone']
+        _content = "{time} {name}({phone}) 已解决上报问题".format(
+            time=_time_str, name=_edit, phone=_phone,
+        )
+    except KeyError:
+        return code_response(InvalidFormFIELDSResponse)
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            # 校验预留信息
+            o_cmd = f"SELECT pid FROM {TABLE_NAME} WHERE id=%s"
+            await cur.execute(o_cmd, (_oid,))
+            if cur.rowcount == 0:
+                return code_response(InvalidWorkerInformationResponse)
+            row = await cur.fetchone()
+            try:
+                p_cmd = "SELECT name, phone FROM `profile` WHERE id=%s"
+                await cur.execute(p_cmd, (row[0],))
+                if cur.rowcount == 0:
+                    return code_response(InvalidWorkerInformationResponse)
+                row = await cur.fetchone()
+                if row[0] != _edit or row[1] != _phone:
+                    return code_response(InvalidWorkerInformationResponse)
+            except IndexError:
+                return code_response(InvalidWorkerInformationResponse)
+            # 更新order
+            m_cmd = f"UPDATE {TABLE_NAME} SET `status`='E', `content`=%s WHERE id=%s AND status='H'"
+            await cur.execute(m_cmd, (_content, _oid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            # 更新equipment
+            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_edit, _eid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, data.get('remark'), _content))
+            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                              (_eid,
+                               '{} {} 修复设备故障'.format(_time_str, _edit),
+                               _edit))
+            await conn.commit()
+
+    return code_response(ResponseOk)
+
+
+@routes.patch('/appraisal')
+async def appraisal(request: Request):
+    _oid = get_maintenance_id(request)
+    try:
+        _appraisal_form = await request.json()
+        assert all(k in APPRAISAL_FORM_FIELDS for k in _appraisal_form)
+    except (KeyError, AssertionError, JSONDecodeError):
+        return code_response(InvalidFormFIELDSResponse)
+
+    if await check_captcha(request, _appraisal_form['phone'], _appraisal_form['captcha']):
+        _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        _name = _appraisal_form['name']
+        _phone = _appraisal_form['phone']
+        _rank = _appraisal_form['rank']
+        _content = "{time} {name}({phone})对工单打了{rank}分评价".format(
+            time=_time_str, name=_name, phone=_phone, rank=_rank
+        )
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                # 更新order
+                m_cmd = f"UPDATE {TABLE_NAME} SET `status`='F', `rank`=%s, `content`=%s WHERE `id`=%s AND `status`='E'"
+                await cur.execute(m_cmd, (_rank, _content, _oid))
+                if cur.rowcount == 0:
+                    return code_response(ConflictStatusResponse)
+                await cur.execute(H_CMD, (_oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content))
+                await conn.commit()
+        return code_response(ResponseOk)
+    else:
+        return code_response(InvalidCaptchaResponse)

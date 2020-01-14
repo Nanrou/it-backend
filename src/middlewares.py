@@ -18,6 +18,9 @@ WITHOUT_VERIFY = [
     ('/api/user/login', 'POST'),
     # 以下都是为移动端服务的
     ('/api/maintenance/report', 'POST'),
+    ('/api/maintenance/arrival', 'PATCH'),
+    ('/api/maintenance/fix', 'PATCH'),
+    ('/api/maintenance/appraisal', 'PATCH'),
     # ('/api/order', 'POST'),
     # ('/api/equipment', 'GET'),
     # ('/api/captcha', 'GET'),
@@ -25,7 +28,6 @@ WITHOUT_VERIFY = [
     # ('/api/order', 'GET'),
     # ('/api/order/arrival', 'PATCH'),
     # ('/api/order/handle', 'PATCH'),
-    # ('/api/order/appraisal', 'PATCH'),
     # ('/api/order/cancel', 'PATCH'),
     # ('/api/history-order-wap', 'GET'),
     # ('/api/order-flow-wap', 'GET'),

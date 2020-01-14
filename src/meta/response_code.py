@@ -86,3 +86,8 @@ class RepetitionOrderIdResponse(ErrcodeABC):
     errcode = 1000011
     errmsg = 'OrderId重复，请稍后尝试'
 
+
+class InvalidWorkerInformationResponse(ErrcodeABC):
+    errcode = 100012
+    errmsg = '预留身份信息错误'
+
