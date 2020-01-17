@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from json import JSONDecodeError
 from re import match
 
 from aiohttp.web import json_response, Response, Request
@@ -8,9 +9,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.meta.permission import Permission
 from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidOriginPasswordResponse, \
-    RepetitionUserResponse
+    RepetitionUserResponse, InvalidFormFIELDSResponse
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import verify_login
+from src.utls.common import verify_login, set_config
 
 routes = PrefixRouteTableDef('/api/user')
 USER_FORM_FIELDS = {'workNumber': 'work_number', 'name': 'name', 'phone': 'phone', 'role': 'role',
@@ -235,3 +236,37 @@ WHERE id=%s
             await conn.commit()
 
     return code_response(ResponseOk)
+
+
+CONFIG_FIELDS = {"sendSms", "sendEmail"}
+
+
+@routes.get('/config')
+async def get_config(request: Request):  # [[key, value], ...]
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            cmd = "SELECT * FROM `it_config`"
+            await cur.execute(cmd)
+            data = []
+            for row in await cur.fetchall():
+                data.append([row[1], row[2]])
+            await conn.commit()
+    return code_response(ResponseOk, data)
+
+
+@routes.patch('/config')
+async def update_config(request: Request):  # {key, value}
+    try:
+        data = await request.json()
+        assert data['key'] in CONFIG_FIELDS
+        assert 'value' in data
+    except (AssertionError, AttributeError, JSONDecodeError):
+        return code_response(InvalidFormFIELDSResponse)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            cmd = " UPDATE `it_config` SET `value`=%s WHERE `key`=%s "
+            await cur.execute(cmd, (data['value'], data['key']))
+            await conn.commit()
+    await set_config(request, data['key'], data['value'])
+    return code_response(ResponseOk)
+

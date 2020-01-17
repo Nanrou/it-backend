@@ -16,6 +16,7 @@ from src.meta.response_code import InvalidTokenResponse, RepetitionLoginResponse
 
 WITHOUT_VERIFY = [
     ('/api/user/login', 'POST'),
+    ('/api/user/logout', 'GET'),
     # 以下都是为移动端服务的
     ('/api/maintenance/report', 'POST'),
     ('/api/maintenance/arrival', 'PATCH'),

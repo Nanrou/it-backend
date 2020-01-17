@@ -222,7 +222,26 @@ class OrderHistory(ModelBase):
         table_name = 'order_history'
 
 
+class ItConfig(ModelBase):
+    """
+    简单保存kv
+    send_sms: 0 or 1
+    send_email: 0 or 1
+    """
+    key = CharField(max_length=32, unique=True)
+    value = CharField(max_length=32)
+
+    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S', constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+
+    class Meta:
+        table_name = 'it_config'
+
+
 if __name__ == '__main__':
-    MySQL_DB.drop_tables([WorkOrder, OrderHistory])
-    MySQL_DB.create_tables([WorkOrder, OrderHistory])
+    # MySQL_DB.drop_tables([WorkOrder, OrderHistory])
+    # MySQL_DB.create_tables([WorkOrder, OrderHistory])
+    MySQL_DB.drop_tables([ItConfig])
+    MySQL_DB.create_tables([ItConfig])
+    ItConfig.insert({ItConfig.key: "sendSms", ItConfig.value: "0"}).execute()
+    ItConfig.insert({ItConfig.key: "sendEmail", ItConfig.value: "0"}).execute()
     pass

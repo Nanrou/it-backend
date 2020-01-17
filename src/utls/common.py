@@ -115,5 +115,45 @@ async def send_sms(phone):
     pass
 
 
+async def send_email(phone):
+    pass
+
+
 async def check_captcha(request: Request, phone: str, captcha: str) -> bool:
     return True
+
+
+async def set_config(request: Request, key: str, value: str):
+    _key = f'it:config:{key}'
+    await request.app['redis'].set(
+        key=_key,
+        value=value,
+        expire=CACHE_EXPIRE_TIME,
+    )
+
+
+async def get_config(request: Request, key: str):
+    """
+
+    :param request:
+    :param key: 缓存数据的类别
+    :return:
+    """
+    _key = f'it:config:{key}'
+    config = await request.app['redis'].get(_key)
+    if config:
+        return config
+    else:
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                cmd = "SELECT `value` from `it_config` where `key=%s`"
+                await cur.execute(cmd, (key, ))
+                row = await cur.fetchone()
+                if row:
+                    _config = row[0]
+                    await set_config(request, key, _config)
+                    await conn.commit()
+                    return _config
+                else:
+                    await conn.commit()
+

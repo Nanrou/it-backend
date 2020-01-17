@@ -470,3 +470,20 @@ async def appraisal(request: Request):
         return code_response(ResponseOk)
     else:
         return code_response(InvalidCaptchaResponse)
+
+
+# @routes.patch('/cancel')
+# async def cancel(request: Request):  # data { name, phone, remark, captcha }
+#     _oid = get_maintenance_id(request)
+#     _eid = get_equipment_id(request)
+#     data = await request.json()
+#
+#     _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+#     try:
+#         _edit = data['name']
+#         _phone = data['phone']
+#         _content = "{time} {name}({phone}) 已取消工单".format(
+#             time=_time_str, name=_edit, phone=_phone,
+#         )
+#     except KeyError:
+#         return code_response(InvalidFormFIELDSResponse)
