@@ -428,7 +428,7 @@ async def fix(request: Request):  # data { name, phone, remark }
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
             # 更新equipment
-            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_edit, _eid))
+            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=0", (_edit, _eid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
             await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, data.get('remark'), _content))
@@ -443,6 +443,7 @@ async def fix(request: Request):  # data { name, phone, remark }
 
 @routes.patch('/appraisal')
 async def appraisal(request: Request):
+    """ E -> F 评分，结束工单 """
     _oid = get_maintenance_id(request)
     try:
         _appraisal_form = await request.json()
@@ -472,18 +473,41 @@ async def appraisal(request: Request):
         return code_response(InvalidCaptchaResponse)
 
 
-# @routes.patch('/cancel')
-# async def cancel(request: Request):  # data { name, phone, remark, captcha }
-#     _oid = get_maintenance_id(request)
-#     _eid = get_equipment_id(request)
-#     data = await request.json()
-#
-#     _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-#     try:
-#         _edit = data['name']
-#         _phone = data['phone']
-#         _content = "{time} {name}({phone}) 已取消工单".format(
-#             time=_time_str, name=_edit, phone=_phone,
-#         )
-#     except KeyError:
-#         return code_response(InvalidFormFIELDSResponse)
+@routes.patch('/cancel')
+async def cancel(request: Request):  # data { name, phone, remark, captcha }
+    """ *(E/F) -> C 取消工单 """
+    _oid = get_maintenance_id(request)
+    _eid = get_equipment_id(request)
+    data = await request.json()
+
+    _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        _edit = data['name']
+        _phone = data['phone']
+        _captcha = data['captcha']
+        _content = "{time} {name}({phone}) 已取消工单".format(
+            time=_time_str, name=_edit, phone=_phone,
+        )
+    except KeyError:
+        return code_response(InvalidFormFIELDSResponse)
+    if await check_captcha(request, _phone, _captcha):
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                # 更新order
+                m_cmd = f"UPDATE {TABLE_NAME} SET `status`='C', `content`=%s WHERE `id`=%s AND `status` NOT IN ('E', 'F')"
+                await cur.execute(m_cmd, (_content, _oid))
+                if cur.rowcount == 0:
+                    return code_response(ConflictStatusResponse)
+                # 更新equipment
+                await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=0", (_edit, _eid))
+                if cur.rowcount == 0:
+                    return code_response(ConflictStatusResponse)
+                await cur.execute(H_CMD, (_oid, 'C', _edit, _phone, data.get('remark'), _content))
+                await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                                  (_eid,
+                                   '{} {} 取消工单'.format(_time_str, _edit),
+                                   _edit))
+                await conn.commit()
+        return code_response(ResponseOk)
+    else:
+        return code_response(InvalidCaptchaResponse)
