@@ -172,6 +172,22 @@ INSERT INTO order_history (
 ) VALUES (%s, %s, %s, %s, %s, %s)\
 """
 
+# 写入equipment history
+E_CMD = "INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)"
+
+STATUS = ('R', 'D', 'H', 'E', 'F', 'C')
+
+
+async def handle_order_history(cursor, oid, status, edit, phone, remark, content):
+    """ 写入order history """
+    assert status in STATUS
+    await cursor.execute(H_CMD, (oid, status, edit, phone, remark, content))
+
+
+async def handle_equipment_history(cursor, eid, edit, content):
+    """ 写入equipment history """
+    await cursor.execute(E_CMD, (eid, content, edit))
+
 
 @routes.get('/flow')
 async def get_flow(request: Request):
@@ -192,7 +208,7 @@ async def get_flow(request: Request):
 
 # 这是针对移动端未登录的
 @routes.post('/report')
-async def report_order(request: Request):
+async def report_order(request: Request):  # {eid, reportForm}
     try:
         _data = await request.json()
         _eid = ItHashids.decode(_data['eid'])
@@ -236,18 +252,22 @@ async def report_order(request: Request):
                     except IntegrityError:
                         return code_response(RepetitionOrderIdResponse)
                     _last_row_id = cur.lastrowid
-                    await cur.execute(H_CMD, (
-                        _last_row_id, 'R', _report_form['name'], _report_form['phone'], _report_form.get('remark'),
-                        _content))
+                    await handle_order_history(cur, _last_row_id, 'R', _report_form['name'], _report_form['phone'],
+                                               _report_form.get('remark'), _content)
+                    # await cur.execute(H_CMD, (
+                    #     _last_row_id, 'R', _report_form['name'], _report_form['phone'], _report_form.get('remark'),
+                    #     _content))
                     # 更新equipment
                     # await cur.execute("UPDATE equipment SET oid=%s, status=1, edit=%s WHERE id=%s",
                     #                   (_last_row_id, _edit, _eid))
                     await cur.execute("UPDATE equipment SET status=1, edit=%s WHERE id=%s",
                                       (_edit, _eid))
-                    await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
-                                      (_eid,
-                                       '{} {} 上报了编号为 {} 的设备故障'.format(_time_str, _edit, _eid),
-                                       _edit))
+                    await handle_equipment_history(cur, _eid, _edit,
+                                                   '{} {} 上报了编号为 {} 的设备故障'.format(_time_str, _edit, _eid))
+                    # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                    #                   (_eid,
+                    #                    '{} {} 上报了编号为 {} 的设备故障'.format(_time_str, _edit, _eid),
+                    #                    _edit))
                     await conn.commit()
 
                 # 更新redis中的order id和order版本
@@ -301,11 +321,13 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
             await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_edit, _eid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
-            await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, f"{data['method']}|{data['remark']}", _content))
-            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
-                              (_eid,
-                               '{} {} 修复设备故障'.format(_time_str, _edit),
-                               _edit))
+            await handle_order_history(cur, _oid, 'E', _edit, _phone, f"{data['method']}|{data['remark']}", _content)
+            # await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, f"{data['method']}|{data['remark']}", _content))
+            await handle_equipment_history(cur, _eid, _edit, '{} {} 修复设备故障'.format(_time_str, _edit))
+            # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+            #                   (_eid,
+            #                    '{} {} 修复设备故障'.format(_time_str, _edit),
+            #                    _edit))
             await conn.commit()
     return code_response(ResponseOk)
 
@@ -329,13 +351,13 @@ async def dispatch(request: Request):  # data { worker: {pid, name}, remark }
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            # todo 将更新状态抽象出来
             # 更新order
             m_cmd = f"UPDATE {TABLE_NAME} SET status='D', pid=%s, name=%s, content=%s WHERE id=%s AND status='R'"
             await cur.execute(m_cmd, (_pid, _worker['name'], _content, _oid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
-            await cur.execute(H_CMD, (_oid, 'D', _worker['name'], None, data.get('remark'), _content))
+            await handle_order_history(cur, _oid, 'D', _worker['name'], None, data.get('remark'), _content)
+            # await cur.execute(H_CMD, (_oid, 'D', _worker['name'], None, data.get('remark'), _content))
             # 应该在history中记录被指派人的信息
             await conn.commit()
 
@@ -381,7 +403,8 @@ async def arrival(request: Request):  # data { name, phone, remark }
             await cur.execute(m_cmd, (_content, _oid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
-            await cur.execute(H_CMD, (_oid, 'H', _edit, _phone, data.get('remark'), _content))
+            await handle_order_history(cur, _oid, 'H', _edit, _phone, data.get('remark'), _content)
+            # await cur.execute(H_CMD, (_oid, 'H', _edit, _phone, data.get('remark'), _content))
             await conn.commit()
 
     return code_response(ResponseOk)
@@ -431,11 +454,13 @@ async def fix(request: Request):  # data { name, phone, remark }
             await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=0", (_edit, _eid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
-            await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, data.get('remark'), _content))
-            await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
-                              (_eid,
-                               '{} {} 修复设备故障'.format(_time_str, _edit),
-                               _edit))
+            await handle_order_history(cur, _oid, 'E', _edit, _phone, data.get('remark'), _content)
+            # await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, data.get('remark'), _content))
+            await handle_equipment_history(cur, _eid, _edit, '{} {} 修复设备故障'.format(_time_str, _edit))
+            # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+            #                   (_eid,
+            #                    '{} {} 修复设备故障'.format(_time_str, _edit),
+            #                    _edit))
             await conn.commit()
 
     return code_response(ResponseOk)
@@ -466,7 +491,8 @@ async def appraisal(request: Request):
                 await cur.execute(m_cmd, (_rank, _content, _oid))
                 if cur.rowcount == 0:
                     return code_response(ConflictStatusResponse)
-                await cur.execute(H_CMD, (_oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content))
+                await handle_order_history(cur, _oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content)
+                # await cur.execute(H_CMD, (_oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content))
                 await conn.commit()
         return code_response(ResponseOk)
     else:
@@ -502,11 +528,13 @@ async def cancel(request: Request):  # data { name, phone, remark, captcha }
                 await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=0", (_edit, _eid))
                 if cur.rowcount == 0:
                     return code_response(ConflictStatusResponse)
-                await cur.execute(H_CMD, (_oid, 'C', _edit, _phone, data.get('remark'), _content))
-                await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
-                                  (_eid,
-                                   '{} {} 取消工单'.format(_time_str, _edit),
-                                   _edit))
+                await handle_order_history(cur, _oid, 'C', _edit, _phone, data.get('remark'), _content)
+                # await cur.execute(H_CMD, (_oid, 'C', _edit, _phone, data.get('remark'), _content))
+                await handle_equipment_history(cur, _eid, _edit, '{} {} 取消工单'.format(_time_str, _edit))
+                # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+                #                   (_eid,
+                #                    '{} {} 取消工单'.format(_time_str, _edit),
+                #                    _edit))
                 await conn.commit()
         return code_response(ResponseOk)
     else:
