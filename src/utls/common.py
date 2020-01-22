@@ -157,3 +157,6 @@ async def get_config(request: Request, key: str):
                 else:
                     await conn.commit()
 
+
+# cache 版本号+内容缓存 服务端
+

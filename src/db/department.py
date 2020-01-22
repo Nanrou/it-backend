@@ -49,13 +49,13 @@ def init_department():
             port=config["mysql"]["port"],
             user=config["mysql"]["user"],
             password=config["mysql"]["password"],
-            database=config["mysql"]["database"],
+            db=config["mysql"]["database"],
             loop=loop)
         MySQL_DB.drop_tables([DepartmentMeta, DepartmentRelation])
         MySQL_DB.create_tables([DepartmentMeta, DepartmentRelation])
 
         tree = Tree(pool)
-        with open('departments.json', 'r') as rf:
+        with open('../meta/departments.json', 'r') as rf:
             _departments = json.load(rf)
         await tree.add_nodes(_departments)
 

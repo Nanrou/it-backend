@@ -142,6 +142,7 @@ async def query(request: Request):
     return resp
 
 
+# todo 规整部门，做成树状，有上下级关系
 @routes.get('/options')
 async def query_options(request: Request):
     res = {
@@ -463,3 +464,6 @@ async def equipment_detail(request: Request):
             }
             await conn.commit()
     return code_response(ResponseOk, res)
+
+
+# todo 清单导出功能
