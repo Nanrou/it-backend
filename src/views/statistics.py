@@ -24,6 +24,7 @@ async def stats_of_department(request: Request):
 
         if filter_params:
             cmd += f' WHERE {filter_params}'
+    cmd += ' GROUP BY `department`'
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -32,13 +33,13 @@ async def stats_of_department(request: Request):
             await cur.execute(cmd)
             for row in await cur.fetchall():
                 data.append({
-                    'department': row[0],
-                    'count': row[1]
+                    'name': row[0],
+                    'value': row[1]
                 })
                 count += row[1]
             await conn.commit()
 
-    return code_response(ResponseOk, {'total': count, 'departments': data})
+    return code_response(ResponseOk, {'total': count, 'sourceData': data})
 
 
 @routes.get('/category')
@@ -57,6 +58,7 @@ async def stats_of_category(request: Request):
 
         if filter_params:
             cmd += f' WHERE {filter_params}'
+    cmd += ' GROUP BY `category`'
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -65,13 +67,13 @@ async def stats_of_category(request: Request):
             await cur.execute(cmd)
             for row in await cur.fetchall():
                 data.append({
-                    'category': row[0],
-                    'count': row[1]
+                    'name': row[0],
+                    'value': row[1]
                 })
                 count += row[1]
             await conn.commit()
 
-    return code_response(ResponseOk, {'total': count, 'categories': data})
+    return code_response(ResponseOk, {'total': count, 'sourceData': data})
 
 
 @routes.get('/purchasingTime')
