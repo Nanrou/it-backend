@@ -102,7 +102,7 @@ FROM department_meta c JOIN
 (
 SELECT b.ancestor, a.depth, a.descendant
 FROM department_relation a
-LEFT JOIN (SELECT * FROM department_relation WHERE depth= 1) b
+LEFT JOIN (SELECT * FROM department_relation WHERE depth = 1) b
 ON a.descendant = b.descendant
 WHERE a.ancestor = %s
 ) d
