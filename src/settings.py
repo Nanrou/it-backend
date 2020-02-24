@@ -1,13 +1,17 @@
 import pathlib
 import platform
 import yaml
+import os
 
 BASE_DIR = pathlib.Path(__file__).parent
 PRO_DIR = BASE_DIR.parent
 config_path = BASE_DIR / 'config.yaml'
+DOWNLOAD_DIR = BASE_DIR / 'download'
 
 
 def get_config(path):
+    if not os.path.exists(DOWNLOAD_DIR):
+        os.mkdir(DOWNLOAD_DIR)
     res = {
         "mysql": {},
         "redis": {},

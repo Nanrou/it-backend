@@ -7,12 +7,12 @@ from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_
 
 routes = PrefixRouteTableDef('/api/statistics')
 
+
 # todo cache
 
 
 @routes.get('/department')
 async def stats_of_department(request: Request):
-
     # cmd = "SELECT `department`, count(*) FROM equipment"
     # filter_params = []
     filter_flag = False
@@ -85,7 +85,6 @@ ON j.department = k.department; \
 
 @routes.get('/category')
 async def stats_of_category(request: Request):
-
     cmd = "SELECT `category`, count(*) FROM equipment"
     filter_params = []
 
@@ -118,11 +117,11 @@ async def stats_of_category(request: Request):
 
 
 @routes.get('/purchasingTime')
-async def stats_of_department(request: Request):
-    # todo department
-    cmd = "SELECT count(*) FROM equipment WHERE (`category`='台式电脑' OR `category`='笔记本电脑')"
-    filter_params = ' AND `purchasing_time`<"{}"'
-    _year = 7
+async def stats_of_department(request: Request):  # category: [...], department: [...], year: int
+    cmd = "SELECT count(*) FROM equipment"
+    filter_params = []
+    # year
+    _year = 5
 
     if request.query.get('year'):
         try:
@@ -130,7 +129,17 @@ async def stats_of_department(request: Request):
         except ValueError:
             pass
 
-    filter_params.format((datetime.now() - timedelta(days=_year * 365)).strftime("%Y-%m-%d"))
+    filter_params.append(
+        '`purchasing_time`<"{}"'.format((datetime.now() - timedelta(days=_year * 365)).strftime("%Y-%m-%d")))
+
+    # department
+    for field in ('department', 'category'):
+        if request.query.get(field):
+            _tmp = request.query.get(field).split(',')
+            if len(_tmp) > 0:
+                filter_params.append('({})'.format(' OR '.join(['`{}`="{}"'.format(field, v) for v in _tmp])))
+
+    filter_params = ' WHERE ' + ' AND '.join(filter_params)
 
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -139,7 +148,28 @@ async def stats_of_department(request: Request):
             row = await cur.fetchone()
             total = row[0]
             await cur.execute(cmd + filter_params)
+            row = await cur.fetchone()
             expiration = row[0]
             await conn.commit()
+    data = [
+        {
+            "name": "超过{}年".format(_year),
+            "value": expiration
+        },
+        {
+            "name": "{}年以内".format(_year),
+            "value": total - expiration
+        },
+    ]
 
-    return code_response(ResponseOk, {'total': total, 'expiration': expiration})
+    return code_response(ResponseOk, {'total': total, 'sourceData': data})
+
+
+@routes.get('/preview')
+async def preview_stats(request: Request):
+    pass
+
+
+@routes.get('/download')
+async def download_stats(request: Request):
+    pass
