@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
+import os.path
 
 from aiohttp.web import Request
 
 from src.meta.response_code import ResponseOk
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
+from src.settings import DOWNLOAD_DIR
 
 routes = PrefixRouteTableDef('/api/statistics')
 
@@ -165,11 +167,66 @@ async def stats_of_department(request: Request):  # category: [...], department:
     return code_response(ResponseOk, {'total': total, 'sourceData': data})
 
 
+def handle_filter_params(request: Request) -> str:
+    cmd = "SELECT * FROM equipment"
+    filter_params = []
+    if request.query.get('purchasingTime'):
+        filter_params.append(
+            '(purchasing_time {} "{}")'.format(
+                '>' if request.query.get('timeInvert') == 'false' else '<',
+                request.query.get('purchasingTime')
+            )
+        )
+    for field in ('department', 'category'):
+        if request.query.get(field):
+            _tmp = request.query.get(field).split(',')
+            if len(_tmp) > 0:
+                filter_params.append('({})'.format(' OR '.join(['`{}`="{}"'.format(field, v) for v in _tmp])))
+
+    return cmd + (" WHERE {}".format(' AND '.join(filter_params)) if len(filter_params) > 0 else "")
+
+
 @routes.get('/preview')
 async def preview_stats(request: Request):
-    pass
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(handle_filter_params(request) + " LIMIT 10")
+            data = []
+            for row in await cur.fetchall():
+                data.append({
+                    # 'eid': ItHashids.encode(row[0]),
+                    'category': row[1],
+                    'brand': row[2],
+                    'modelNumber': row[3],
+                    'serialNumber': row[4],
+                    'price': row[5],
+                    'purchasingTime': row[6].strftime('%Y-%m-%d'),
+                    # 'guarantee': row[7],
+                    # 'remark': row[8],
+                    # 'status': row[9],
+                    'user': row[10],
+                    'owner': row[11],
+                    'department': row[12],
+                    # 'edit': row[13],
+                    # 'del_flag': row[14],
+                })
+            await conn.commit()
+    return code_response(ResponseOk, data)
 
 
 @routes.get('/download')
 async def download_stats(request: Request):
-    pass
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(handle_filter_params(request))
+            data = [','.join(['所属部门', '分类', '品牌', '型号', '序列号', '价格', '购买时间', '使用人', '责任人'])]
+            for row in await cur.fetchall():
+                data.append(','.join(
+                    [row[12], row[1], row[2], row[3], row[4], str(row[5]), row[6].strftime('%Y-%m-%d'), row[10],
+                     row[11]]))
+            await conn.commit()
+    fn = '{}.csv'.format(datetime.now().strftime("%Y%m%d%H%M"))
+    with open(os.path.join(DOWNLOAD_DIR, fn), 'w', encoding='gbk') as wf:
+        wf.write('\n'.join(data))
+
+    return code_response(ResponseOk, {'uri': f'/api/download/{fn}', 'name': fn})

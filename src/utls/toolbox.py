@@ -211,10 +211,10 @@ class BloomFilter:
 
 
 def code_response(response_type, data=None):
-    if data:
-        return json_response(response_type(data).json())
-    else:
+    if data is None:
         return json_response(response_type.json_without_data())
+    else:
+        return json_response(response_type(data).json())
 
 
 def get_query_params(request: Request, key: str):
