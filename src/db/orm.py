@@ -32,6 +32,7 @@ class Profile(ModelBase):
     phone:             电话
     role:              角色
     password_hash:
+    email:             邮箱地址，派工维修的时候再设为必填
     """
     username = CharField(max_length=16)
     work_number = CharField(max_length=8)
@@ -40,6 +41,7 @@ class Profile(ModelBase):
     phone = CharField(max_length=16)
     role = TinyInt()
     password_hash = CharField(max_length=128)
+    email = CharField(max_length=128, null=True)
 
     @property
     def password(self):

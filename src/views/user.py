@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from json import JSONDecodeError
 from re import match
 
-from aiohttp.web import json_response, Response, Request
+from aiohttp.web import Request
 from jwt import encode as jwt_encode
 from pymysql.err import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -33,6 +33,7 @@ async def login(request: Request):
             'dep': user.department,
             'rol': user.role,
             'pho': user.phone,
+            'email': user.email,
             'iat': round(datetime.now().timestamp()),
             'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
         }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
@@ -45,6 +46,7 @@ async def login(request: Request):
                 'department': user.department,
                 'role': user.role,
                 'phone': user.phone,
+                'email': user.email,
             }
         })
     else:
@@ -65,6 +67,7 @@ async def alive(request: Request):
         'department': request['jwt_content']['dep'],
         'role': request['jwt_content']['rol'],
         'phone': request['jwt_content']['pho'],
+        'email': request['jwt_content']['email'],
     })
 
 
@@ -84,6 +87,7 @@ async def change_password(request: Request):
                 return code_response(ResponseOk)
             else:
                 return code_response(InvalidOriginPasswordResponse)
+
 
 #
 # @routes.get('/blacklist-length')
@@ -132,9 +136,13 @@ def get_user_id(request: Request):
     return get_query_params(request, 'uid')
 
 
+def get_jwt_user_id(request: Request):
+    return ItHashids.decode(request['jwt_content']['uid'])
+
+
 @routes.patch('/reset_password')
 async def reset_password(request: Request):
-    _uid = get_user_id(request)
+    _uid = get_jwt_user_id(request)
     data = await request.json()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -145,8 +153,8 @@ async def reset_password(request: Request):
 
 
 @routes.patch('/permission')
-async def reset_password(request: Request):
-    _uid = get_user_id(request)
+async def update_permission(request: Request):
+    _uid = get_jwt_user_id(request)
     data = await request.json()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -167,6 +175,7 @@ name,
 department,
 role,
 phone,
+email,
 password_hash
 ) VALUES (%s, %s, %s, %s, %s, %s, %s)\
 """
@@ -180,6 +189,7 @@ password_hash
                     data.get('department'),
                     data.get('role'),
                     data.get('phone'),
+                    data.get('email'),
                     generate_password_hash('8888')
                 ))
                 await conn.commit()
@@ -219,7 +229,8 @@ UPDATE profile SET
     name=%s,
     department=%s,
     phone=%s,
-    role=%s
+    role=%s,
+    email=%s
 WHERE id=%s
 """
     async with request.app['mysql'].acquire() as conn:
@@ -231,6 +242,7 @@ WHERE id=%s
                 data.get('department'),
                 data.get('phone'),
                 data.get('role'),
+                data.get('email'),
                 _uid
             ))
             await conn.commit()
@@ -270,3 +282,19 @@ async def update_config(request: Request):  # {key, value}
     await set_config(request, data['key'], data['value'])
     return code_response(ResponseOk)
 
+
+@routes.patch('/updateProfile')
+async def update_profile(request: Request):  # {key, value}
+    # 用户自己更新phone或者email
+    _uid = get_jwt_user_id(request)
+    try:
+        data = await request.json()
+        assert all(k in data for k in ['type', 'newValue'])
+    except (AssertionError, AttributeError, JSONDecodeError):
+        return code_response(InvalidFormFIELDSResponse)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute('UPDATE profile SET `{}`=%s WHERE id=%s'.format(data['type']),
+                              (data['newValue'], _uid))
+            await conn.commit()
+    return code_response(ResponseOk)
