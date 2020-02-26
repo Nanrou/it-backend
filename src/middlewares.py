@@ -32,6 +32,7 @@ WITHOUT_VERIFY = [
     # ('/api/order/cancel', 'PATCH'),
     # ('/api/history-order-wap', 'GET'),
     # ('/api/order-flow-wap', 'GET'),
+    ('/api/maintenance/patrol', 'POST'),
 ]
 
 MODULE_PERMISSION = {

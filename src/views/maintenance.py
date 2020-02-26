@@ -1,7 +1,7 @@
 from datetime import datetime
 from json import JSONDecodeError
 
-from aiohttp.web import Request, Response
+from aiohttp.web import Request
 from pymysql.err import IntegrityError
 
 from src.meta.permission import Permission
@@ -9,7 +9,7 @@ from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, Confl
     InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse
 from src.views.equipment import get_equipment_id
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import set_cache_version, get_cache_version, get_qrcode, send_sms, check_captcha
+from src.utls.common import set_cache_version, get_cache_version, get_qrcode, send_email, check_captcha
 
 routes = PrefixRouteTableDef('/api/maintenance')
 
@@ -360,7 +360,8 @@ async def dispatch(request: Request):  # data { worker: {pid, name}, remark }
             # await cur.execute(H_CMD, (_oid, 'D', _worker['name'], None, data.get('remark'), _content))
             # 应该在history中记录被指派人的信息
             await conn.commit()
-
+    # todo 发email通知
+    # await send_email()
     return code_response(ResponseOk)
 
 
@@ -539,3 +540,120 @@ async def cancel(request: Request):  # data { name, phone, remark, captcha }
         return code_response(ResponseOk)
     else:
         return code_response(InvalidCaptchaResponse)
+
+
+PATROL_TABLE = "patrol_meta"
+
+
+async def get_patrol_id(request: Request):
+    """ 获取当前order id，已经加 1 的了 """
+    _date_str = datetime.now().strftime('%Y%m')
+    patrol_id = await request.app['redis'].get(f'it:patrolID:{_date_str}')
+    if patrol_id is None:
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT COUNT(*) FROM {} WHERE patrol_id LIKE '{}%'".format(PATROL_TABLE, _date_str))
+                patrol_id = await cur.fetchone()
+                await conn.commit()
+        patrol_id = patrol_id[0]
+    # await request.app['redis'].set(f'it:orderID:{_date_str}', int(order_id) + 1, 3600)  # +1
+    return '{date}{pid:0>3}'.format(date=_date_str, pid=int(patrol_id) + 1)
+
+
+async def set_patrol_id(request: Request, order_id: str):
+    await request.app['redis'].set(
+        key='it:patrolID:{}'.format(order_id[:-3]),
+        value=order_id[-3:],
+        expire=ORDER_ID_EXPIRE_TIME,
+    )
+
+
+@routes.post('/patrol')
+async def create_patrol(request: Request):  # { pid: str, eids: [] }
+    try:
+        _data = await request.json()
+        _eids = [ItHashids.decode(_eid) for _eid in _data['eids']]
+        _pid = ItHashids.decode(_data['pid'])
+    except (KeyError, AssertionError, JSONDecodeError):
+        return code_response(InvalidFormFIELDSResponse)
+
+    _patrol_id = await get_patrol_id(request)
+
+    m_cmd = """\
+        INSERT INTO `patrol_meta` (
+            patrol_id,
+            pid,
+            total
+        ) VALUES (%s, %s, %s)\
+"""
+    d_cmd = """
+        INSERT INTO `patrol_detail` (
+            pid,
+            eid
+        ) VALUES (%s, %s)\
+"""
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            try:
+                await cur.execute(m_cmd, (_patrol_id, _pid, len(_eids)))
+            except IntegrityError:
+                return code_response(RepetitionOrderIdResponse)
+            _last_row_id = cur.lastrowid
+            await cur.executemany(d_cmd, [(_last_row_id, _eid) for _eid in _eids])
+            await conn.commit()
+    return code_response(ResponseOk)
+
+
+@routes.get('/patrolPlan')
+async def get_patrol_plan(request: Request):
+    try:
+        page = int(request.query.get('page')) or 1
+    except ValueError:
+        return code_response(MissRequiredFieldsResponse)
+
+    cmd = f"SELECT a.id, a.patrol_id, b.name, a.total, a.status FROM {PATROL_TABLE} a JOIN `profile` b ON a.pid = b.id"
+    cmd += ' ORDER BY id DESC' + ' limit {}, {}'.format((page - 1) * PAGE_SIZE, PAGE_SIZE)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            # 计算总页数
+            await cur.execute(f"SELECT COUNT(*) FROM {PATROL_TABLE}")
+            sum_of_equipment = (await cur.fetchone())[0]
+            total_page = sum_of_equipment // PAGE_SIZE
+            if sum_of_equipment % PAGE_SIZE:
+                total_page += 1
+
+            await cur.execute(cmd)
+            data = []
+            for row in await cur.fetchall():
+                data.append({
+                    'pid': ItHashids.encode(row[0]),
+                    'patrolId': row[1],
+                    'name': row[2],
+                    'total': row[3],
+                    'status': row[4],
+                })
+            await conn.commit()
+
+    resp = code_response(ResponseOk, {
+        'totalPage': total_page,
+        'tableData': data
+    })
+    # resp.set_cookie(f'{KEY_OF_VERSION}-version', await get_cache_version(request, KEY_OF_VERSION))
+    return resp
+
+
+def get_patrol_id_in_uri(request: Request):
+    return get_query_params(request, 'pid')
+
+
+@routes.delete('/patrol')
+async def delete_patrol(request: Request):
+    pid = get_patrol_id_in_uri(request)
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE `patrol_meta` SET del_flag=1 WHERE id=%s", pid)
+            await cur.execute("UPDATE `patrol_detail` SET del_flag=1 WHERE pid=%s", pid)
+            await conn.commit()
+    return code_response(ResponseOk)

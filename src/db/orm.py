@@ -239,11 +239,93 @@ class ItConfig(ModelBase):
         table_name = 'it_config'
 
 
+class CaptchaMeta(ModelBase):
+    """
+    记录 验证码 和 order/patrol 的关系
+    """
+    mid = CharField(max_length=16)
+    captcha = CharField(max_length=12)
+    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
+                                 constraints=[SQL('DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')])
+
+    class Meta:
+        table_name = 'captcha_meta'
+        indexes = (
+            (('mid',), True),
+        )
+
+
+class EmailHistory(ModelBase):
+    """
+    记录email的发送记录
+    mid:        是order/patrol的id
+    email:      发送的目标邮箱
+    captcha:    当前邮件包含的验证码
+    content:    邮件正文
+    """
+    mid = CharField(max_length=16)
+    email = CharField(max_length=128)
+    captcha = CharField(max_length=12)
+    content = CharField(max_length=256)
+    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S', constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+
+    class Meta:
+        table_name = 'email_history'
+
+
+class PatrolMeta(ModelBase):
+    """
+    巡检的meta资料
+    patrol_id:              特殊的工单ID yyyymm + 3位index
+    pid:                    当前处理人的ID
+    total:                  计划内的设备总数
+    status:                 0 进行中，1 已完成，2已取消
+    """
+    patrol_id = CharField(max_length=12)
+    pid = IntegerField()
+    total = IntegerField()
+    status = TinyInt(constraints=[SQL('DEFAULT 0')])
+
+    del_flag = BooleanField(constraints=[SQL('DEFAULT 0')])
+    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
+                                 constraints=[SQL('DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')])
+
+    class Meta:
+        table_name = 'patrol_meta'
+        indexes = (
+            (('patrol_id',), True),
+        )
+
+
+class PatrolDetail(ModelBase):
+    """
+    巡检的meta资料
+    pid:               对应的巡检id
+    eid:               设备对应的id
+    check:             0 进行中，1 已完成
+    """
+    pid = CharField(max_length=16)
+    eid = CharField(max_length=32)
+    check = TinyInt(constraints=[SQL('DEFAULT 0')])
+
+    del_flag = BooleanField(constraints=[SQL('DEFAULT 0')])
+    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
+                                 constraints=[SQL('DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')])
+
+    class Meta:
+        table_name = 'patrol_detail'
+        indexes = (
+            (('pid',), False),
+        )
+
+
 if __name__ == '__main__':
     # MySQL_DB.drop_tables([WorkOrder, OrderHistory])
     # MySQL_DB.create_tables([WorkOrder, OrderHistory])
-    MySQL_DB.drop_tables([ItConfig])
-    MySQL_DB.create_tables([ItConfig])
-    ItConfig.insert({ItConfig.key: "sendSms", ItConfig.value: "0"}).execute()
-    ItConfig.insert({ItConfig.key: "sendEmail", ItConfig.value: "0"}).execute()
+    # MySQL_DB.drop_tables([ItConfig])
+    # MySQL_DB.create_tables([ItConfig])
+    # ItConfig.insert({ItConfig.key: "sendSms", ItConfig.value: "0"}).execute()
+    # ItConfig.insert({ItConfig.key: "sendEmail", ItConfig.value: "0"}).execute()
+    MySQL_DB.drop_tables([CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
+    MySQL_DB.create_tables([CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
     pass

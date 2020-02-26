@@ -142,6 +142,63 @@ async def query(request: Request):
     return resp
 
 
+@routes.get('/queryWithoutPagination')
+async def query_without_pagination(request: Request):
+    # 不做304
+    # 判断root，且不做304
+
+    cmd = "SELECT * FROM equipment"
+    filter_params = []
+
+    # 对过滤项进行组合处理
+    for type_, col_format in zip(
+            ['department', 'equipment', 'status'],
+            ['department="{}"', 'category="{}"', 'status={}']
+    ):
+        if request.query.get(type_):
+            _tmp = []
+            for d in request.query.get(type_).split(','):
+                _tmp.append(col_format.format(d))
+            if len(_tmp) > 1:
+                filter_params.append("({})".format(' OR '.join(_tmp)))
+            elif len(_tmp) == 1:
+                filter_params.append(_tmp[0])
+    filter_part = ' AND '.join(filter_params)
+    if request['jwt_content'].get('rol') & Permission.SUPER and request.query.get('all'):
+        pass
+    else:
+        filter_part = 'del_flag=0' + (' AND ' if filter_part else '') + filter_part
+
+    if filter_part:
+        filter_part = ' WHERE ' + filter_part
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(cmd + filter_part)
+            data = []
+            for row in await cur.fetchall():
+                data.append({
+                    'eid': ItHashids.encode(row[0]),
+                    'category': row[1],
+                    'brand': row[2],
+                    'modelNumber': row[3],
+                    'serialNumber': row[4],
+                    'price': row[5],
+                    'purchasingTime': row[6].strftime('%Y-%m-%d'),
+                    'guarantee': row[7],
+                    'remark': row[8],
+                    'status': row[9],
+                    'user': row[10],
+                    'owner': row[11],
+                    'department': row[12],
+                    'edit': row[13],
+                    'del_flag': row[14],
+                })
+            await conn.commit()
+
+    resp = code_response(ResponseOk, data)
+    return resp
+
 # todo 规整部门，做成树状，有上下级关系
 @routes.get('/options')
 async def query_options(request: Request):
