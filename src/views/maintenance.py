@@ -657,3 +657,31 @@ async def delete_patrol(request: Request):
             await cur.execute("UPDATE `patrol_detail` SET del_flag=1 WHERE pid=%s", pid)
             await conn.commit()
     return code_response(ResponseOk)
+
+
+def get_patrol_detail_id(request: Request):
+    return get_query_params(request, 'pid')
+
+
+@routes.get('/patrolDetail')
+async def get_patrol_detail(request: Request):
+    pid = get_patrol_detail_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("""\
+            SELECT b.department, b.category, a.`check`, a.gmt_modified
+            FROM `patrol_detail` a
+            JOIN `equipment` b ON a.eid = b.id 
+            WHERE `pid`=%s\
+""", pid)
+            data = []
+            for row in await cur.fetchall():
+                data.append({
+                    'department': row[0],
+                    'category': row[1],
+                    'check': row[2],
+                    'checkTime': row[3].strftime('%Y-%m-%d')
+                })
+            await conn.commit()
+    return code_response(ResponseOk, data)
+
