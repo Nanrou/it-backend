@@ -91,3 +91,7 @@ class InvalidWorkerInformationResponse(ErrcodeABC):
     errcode = 100012
     errmsg = '预留身份信息错误'
 
+
+class EmtpyPatrolPlanResponse(ErrcodeABC):
+    errcode = 100013
+    errmsg = '该设备无巡检计划'

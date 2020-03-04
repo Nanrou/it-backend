@@ -6,7 +6,8 @@ from pymysql.err import IntegrityError
 
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, ConflictStatusResponse, \
-    InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse
+    InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse, \
+    EmtpyPatrolPlanResponse
 from src.views.equipment import get_equipment_id
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
 from src.utls.common import set_cache_version, get_cache_version, get_qrcode, send_email, check_captcha
@@ -685,3 +686,28 @@ async def get_patrol_detail(request: Request):
             await conn.commit()
     return code_response(ResponseOk, data)
 
+
+@routes.get('/singlePatrolPlanList')
+async def get_patrol_detail(request: Request):
+    eid = get_equipment_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("""
+            SELECT b.id, b.patrol_id 
+            FROM patrol_detail a 
+            JOIN patrol_meta b ON a.pid = b.id 
+            WHERE a.eid = %s AND a.`check` = 0;
+""", eid)
+            data = []
+            for row in await cur.fetchall():
+                data.append({
+                    'pid': ItHashids.encode(row[0]),
+                    'patrolId': row[1],
+                })
+            await conn.commit()
+    return code_response(ResponseOk, data) if len(data) else code_response(EmtpyPatrolPlanResponse)
+
+
+@routes.patch('/patrolCheck')
+async def patrol_check(request: Request):
+    pass
