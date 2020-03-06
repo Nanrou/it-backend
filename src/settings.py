@@ -16,10 +16,12 @@ def get_config(path):
         "mysql": {},
         "redis": {},
         "jwt-secret": "",
+        "smtp": {},
     }
     with open(path) as rf:
         tmp = yaml.load(rf, Loader=yaml.FullLoader)
         res["jwt-secret"] = tmp["jwt-secret"]
+        res["smtp"] = tmp["smtp"]
         if platform.system() == 'Darwin':
             res["mysql"] = tmp["local-mysql"]
             res["redis"] = tmp["local-redis"]

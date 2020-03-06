@@ -18,6 +18,7 @@ WITHOUT_VERIFY = [
     ('/api/user/login', 'POST'),
     ('/api/user/logout', 'GET'),
     # 以下都是为移动端服务的
+    ('/api/equipment/detail', 'GET'),
     ('/api/maintenance/report', 'POST'),
     ('/api/maintenance/arrival', 'PATCH'),
     ('/api/maintenance/fix', 'PATCH'),
@@ -32,7 +33,8 @@ WITHOUT_VERIFY = [
     # ('/api/order/cancel', 'PATCH'),
     # ('/api/history-order-wap', 'GET'),
     # ('/api/order-flow-wap', 'GET'),
-    ('/api/maintenance/patrol', 'POST'),
+    # ('/api/maintenance/patrol', 'POST'),
+    ('/api/maintenance/singlePatrolPlanList', 'GET'),
 ]
 
 MODULE_PERMISSION = {

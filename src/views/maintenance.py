@@ -7,10 +7,10 @@ from pymysql.err import IntegrityError
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, ConflictStatusResponse, \
     InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse, \
-    EmtpyPatrolPlanResponse
+    EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse
 from src.views.equipment import get_equipment_id
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import set_cache_version, get_cache_version, get_qrcode, send_email, check_captcha
+from src.utls.common import get_cache_version, send_maintenance_order_email, check_captcha, create_captcha
 
 routes = PrefixRouteTableDef('/api/maintenance')
 
@@ -22,7 +22,7 @@ ORDER_ID_EXPIRE_TIME = 60 * 60 * 24  # 记录当天的条数 order id 的过期�
 #                       'remark': 'remark', 'captcha': 'captcha'}
 # APPRAISAL_FORM_FIELDS = {'name': 'name', 'phone': 'phone', 'rank': 'rank',
 #                          'remark': 'remark', 'captcha': 'captcha'}
-REPORT_FORM_FIELDS = {'name', 'phone', 'reason', 'remark', 'captcha'}
+REPORT_FORM_FIELDS = {'name', 'phone', 'reason', 'remark', 'captcha', 'workNumber'}
 APPRAISAL_FORM_FIELDS = {'name', 'phone', 'rank', 'remark', 'captcha'}
 REMOTE_HANDLE_FIELDS = {'eid', 'method', 'remark'}
 MAINTENANCE_STATUS = 1
@@ -129,11 +129,16 @@ async def get_maintenance_workers(request: Request):
     res = []
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(f"SELECT `id`, `name` FROM profile WHERE role & {Permission.MAINTENANCE}")
+            await cur.execute(
+                f"SELECT `id`, `name`, `phone`, `email`, `role` FROM profile WHERE role & {Permission.MAINTENANCE}")
             for row in await cur.fetchall():
+                if row[-1] & Permission.SUPER:
+                    continue
                 res.append({
                     "pid": ItHashids.encode(row[0]),
                     "name": row[1],
+                    "phone": row[2],
+                    "email": row[3],
                 })
     return code_response(ResponseOk, res)
 
@@ -290,9 +295,6 @@ async def get_captcha(request: Request):
     pass
 
 
-# async def handle_status(action: str, )
-
-
 @routes.patch('/remote')
 async def remote_handle(request: Request):  # data {eid, method, remark}
     """ R -> E 远程解决问题 """
@@ -334,7 +336,7 @@ async def remote_handle(request: Request):  # data {eid, method, remark}
 
 
 @routes.patch('/dispatch')
-async def dispatch(request: Request):  # data { worker: {pid, name}, remark }
+async def dispatch(request: Request):  # data { worker: {pid, name, phone, email}, remark }
     """ R -> D 派单 """
     _oid = get_maintenance_id(request)
     data = await request.json()
@@ -344,6 +346,7 @@ async def dispatch(request: Request):  # data { worker: {pid, name}, remark }
         _worker = data['worker']
         _pid = ItHashids.decode(_worker['pid'])
         _edit = request['jwt_content'].get('name')
+        _order_id = data['orderId']
         _content = "{time} {name} 将工单分派给了 {worker}".format(
             time=_time_str, name=_edit, worker=_worker['name']
         )
@@ -361,8 +364,12 @@ async def dispatch(request: Request):  # data { worker: {pid, name}, remark }
             # await cur.execute(H_CMD, (_oid, 'D', _worker['name'], None, data.get('remark'), _content))
             # 应该在history中记录被指派人的信息
             await conn.commit()
-    # todo 发email通知
-    # await send_email()
+    try:
+        await send_maintenance_order_email(request, _oid, _order_id, create_captcha(), _worker['email'])
+    except RuntimeError:
+        return code_response(OrderMissContentResponse)
+    except TimeoutError:
+        return code_response(DispatchSuccessWithoutSendEmailResponse)
     return code_response(ResponseOk)
 
 

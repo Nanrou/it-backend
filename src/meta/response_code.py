@@ -95,3 +95,19 @@ class InvalidWorkerInformationResponse(ErrcodeABC):
 class EmtpyPatrolPlanResponse(ErrcodeABC):
     errcode = 100013
     errmsg = '该设备无巡检计划'
+
+
+class OrderMissContentResponse(ErrcodeABC):
+    errcode = 100014
+    errmsg = '该流程缺失记录，请联系管理员'
+
+
+class SendEmailTimeoutResponse(ErrcodeABC):
+    errcode = 100015
+    errmsg = '发送邮件失败，请稍后重试'
+
+
+class DispatchSuccessWithoutSendEmailResponse(ErrcodeABC):
+    errcode = 100016
+    errmsg = '指派成功，但发送邮件失败，请手动重发'
+

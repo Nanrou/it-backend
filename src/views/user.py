@@ -127,6 +127,7 @@ async def query(request: Request):
                     'department': row[4],
                     'phone': row[5],
                     'role': row[6],
+                    'email': row[-1],
                 })
             await conn.commit()
     return code_response(ResponseOk, data)
@@ -198,6 +199,7 @@ password_hash
     return code_response(ResponseOk)
 
 
+# todo rm
 @routes.get('/dispatch-query')
 async def dispatch_query(request: Request):
     """ 获取维修人员名单 """
