@@ -7,7 +7,8 @@ from pymysql.err import IntegrityError
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, ConflictStatusResponse, \
     InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse, \
-    EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse
+    EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse, MissEmailContentResponse, \
+    SendEmailTimeoutResponse, AlreadySendEmailResponse
 from src.views.equipment import get_equipment_id
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
 from src.utls.common import get_cache_version, send_maintenance_order_email, check_captcha, create_captcha
@@ -718,3 +719,65 @@ async def get_patrol_detail(request: Request):
 @routes.patch('/patrolCheck')
 async def patrol_check(request: Request):
     pass
+
+
+def get_case_id(request: Request):
+    return get_query_params(request, 'caseId', decode=False)
+
+
+@routes.get('/emailContent')
+async def get_email_content(request: Request):  # case id 就是长的那个id
+    case_id = get_case_id(request)
+    _content = ""
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT `content` FROM `email_history` WHERE `case_id`=%s", case_id)
+            row = await cur.fetchone()
+            await conn.commit()
+            if row:
+                _content = row[0]
+            else:
+                return code_response(MissEmailContentResponse)
+    return code_response(ResponseOk, {'content': _content})
+
+
+async def get_email_meta(request, case_id, table):
+    assert table in ('order', 'patrol_meta')
+    fd = 'order_id' if table == 'order' else 'patrol_id'
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(f"""\
+SELECT a.`id`, b.`email`, c.`captcha` 
+FROM `{table}` a 
+JOIN `profile` b ON a.pid=b.id 
+JOIN `captcha_meta` c ON a.`{fd}` = c.`case_id` 
+WHERE a.`{fd}`=%s\
+""", case_id)
+            row = await cur.fetchone()
+            await conn.commit()
+            if row:
+                return row
+            else:
+                raise RuntimeError
+
+
+@routes.patch('/resendMaintenanceEmail')
+async def resend_email(request: Request):
+    case_id = get_case_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT `content` FROM `email_history` WHERE `case_id`=%s", case_id)
+            row = await cur.fetchone()
+            await conn.commit()
+            if row:
+                return code_response(AlreadySendEmailResponse)
+    try:
+        _mid, _to_address, _captcha = await get_email_meta(request, case_id, 'order')
+        try:
+            await send_maintenance_order_email(request, _mid, case_id, _captcha, _to_address)
+            return code_response(ResponseOk)
+        except RuntimeError:
+            return code_response(SendEmailTimeoutResponse)
+    except RuntimeError:
+        return code_response(ConflictStatusResponse)
+

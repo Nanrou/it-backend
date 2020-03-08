@@ -111,3 +111,12 @@ class DispatchSuccessWithoutSendEmailResponse(ErrcodeABC):
     errcode = 100016
     errmsg = '指派成功，但发送邮件失败，请手动重发'
 
+
+class MissEmailContentResponse(ErrcodeABC):
+    errcode = 100017
+    errmsg = '无邮件发送记录'
+
+
+class AlreadySendEmailResponse(ErrcodeABC):
+    errcode = 100018
+    errmsg = '已发送邮件通知'

@@ -242,8 +242,9 @@ class ItConfig(ModelBase):
 class CaptchaMeta(ModelBase):
     """
     记录 验证码 和 order/patrol 的关系
+    case_id:    是order/patrol的长id
     """
-    mid = CharField(max_length=16)
+    case_id = CharField(max_length=16)
     captcha = CharField(max_length=12)
     gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
                                  constraints=[SQL('DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')])
@@ -251,19 +252,19 @@ class CaptchaMeta(ModelBase):
     class Meta:
         table_name = 'captcha_meta'
         indexes = (
-            (('mid',), True),
+            (('case_id',), True),
         )
 
 
 class EmailHistory(ModelBase):
     """
     记录email的发送记录
-    mid:        是order/patrol的id
+    case_id:    是order/patrol的长id
     email:      发送的目标邮箱
     captcha:    当前邮件包含的验证码
     content:    邮件正文
     """
-    mid = CharField(max_length=16)
+    case_id = CharField(max_length=16)
     email = CharField(max_length=128)
     captcha = CharField(max_length=12)
     content = CharField(max_length=256)
@@ -271,6 +272,9 @@ class EmailHistory(ModelBase):
 
     class Meta:
         table_name = 'email_history'
+        indexes = (
+            (('case_id',), True),
+        )
 
 
 class PatrolMeta(ModelBase):
@@ -326,6 +330,6 @@ if __name__ == '__main__':
     # MySQL_DB.create_tables([ItConfig])
     # ItConfig.insert({ItConfig.key: "sendSms", ItConfig.value: "0"}).execute()
     # ItConfig.insert({ItConfig.key: "sendEmail", ItConfig.value: "0"}).execute()
-    MySQL_DB.drop_tables([CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
-    MySQL_DB.create_tables([CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
+    MySQL_DB.drop_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
+    MySQL_DB.create_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
     pass

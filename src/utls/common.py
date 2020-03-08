@@ -1,7 +1,6 @@
 from collections import namedtuple
 from datetime import datetime, timedelta
 from email.message import EmailMessage
-from email.mime.text import MIMEText
 import socket
 import platform
 from random import random
@@ -10,6 +9,7 @@ from aiosmtplib import SMTP, SMTPTimeoutError
 from aiohttp.web import Request
 from jwt import encode as jwt_encode
 from qrcode import make as qrcode_make
+from pymysql.err import IntegrityError
 from werkzeug.security import check_password_hash
 
 from src.settings import config
@@ -146,7 +146,14 @@ def create_captcha() -> str:  # 生成和更新验证码
 async def set_captcha(request, mid, captcha):
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("INSERT INTO `captcha_meta` (mid, captcha) VALUES (%s, %s)", (mid, captcha))
+            await cur.execute("INSERT INTO `captcha_meta` (case_id, captcha) VALUES (%s, %s)", (mid, captcha))
+            await conn.commit()
+
+
+async def update_captcha(request, mid, captcha):
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE `captcha_meta` SET captcha=%s WHERE case_id=%s)", (captcha, mid))
             await conn.commit()
 
 
@@ -158,12 +165,25 @@ async def send_maintenance_order_email(request, oid: str, order_id: str, captcha
             row = await cur.fetchone()
             if row:
                 msg['Subject'] = ORDER_TITLE.format(id_=order_id)
-                msg.set_content(ORDER_CONTENT.format(content=row[0], captcha=captcha))
+                content = ORDER_CONTENT.format(content=row[0], captcha=captcha)
+                msg.set_content(content)
+                await conn.commit()
             else:  # 没有对应工单的内容
                 raise RuntimeError
-            await conn.commit()
     await send_email(msg, to_address)
-    await set_captcha(request, oid, captcha)
+    await store_email_content(request, order_id, to_address, captcha, content)
+    try:  # 重发的时候会重复插入
+        await set_captcha(request, order_id, captcha)
+    except IntegrityError:
+        pass
+
+
+async def store_email_content(request, order_id, email, captcha, content):
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("INSERT INTO `email_history` (case_id, email, captcha, content) VALUES (%s, %s, %s, %s)",
+                              (order_id, email, captcha, content))
+            await conn.commit()
 
 
 async def send_email(msg: EmailMessage, to_address: str):  # 超时raise Timeout

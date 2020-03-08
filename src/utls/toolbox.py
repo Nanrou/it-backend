@@ -217,9 +217,12 @@ def code_response(response_type, data=None):
         return json_response(response_type(data).json())
 
 
-def get_query_params(request: Request, key: str):
+def get_query_params(request: Request, key: str, decode=True):
     try:
-        return ItHashids.decode(request.query[key])
+        if decode:
+            return ItHashids.decode(request.query[key])
+        else:
+            return request.query[key]
     except KeyError:
         raise HTTPForbidden(text=f'Miss {key}')
 
