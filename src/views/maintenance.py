@@ -11,7 +11,7 @@ from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, Confl
     SendEmailTimeoutResponse, AlreadySendEmailResponse
 from src.views.equipment import get_equipment_id
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import get_cache_version, send_maintenance_order_email, check_captcha, create_captcha
+from src.utls.common import get_cache_version, send_maintenance_order_email, check_captcha, create_captcha, send_patrol_email
 
 routes = PrefixRouteTableDef('/api/maintenance')
 
@@ -583,6 +583,7 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
         _data = await request.json()
         _eids = [ItHashids.decode(_eid) for _eid in _data['eids']]
         _pid = ItHashids.decode(_data['pid'])
+        _email = _data['email']
     except (KeyError, AssertionError, JSONDecodeError):
         return code_response(InvalidFormFIELDSResponse)
 
@@ -611,6 +612,7 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
             _last_row_id = cur.lastrowid
             await cur.executemany(d_cmd, [(_last_row_id, _eid) for _eid in _eids])
             await conn.commit()
+    await send_patrol_email(request, _last_row_id, _patrol_id, create_captcha(), _email)
     return code_response(ResponseOk)
 
 
@@ -621,12 +623,17 @@ async def get_patrol_plan(request: Request):
     except ValueError:
         return code_response(MissRequiredFieldsResponse)
 
-    cmd = f"SELECT a.id, a.patrol_id, b.name, a.total, a.status FROM {PATROL_TABLE} a JOIN `profile` b ON a.pid = b.id"
-    cmd += ' ORDER BY id DESC' + ' limit {}, {}'.format((page - 1) * PAGE_SIZE, PAGE_SIZE)
+    cmd = f"""\
+    SELECT a.id, a.patrol_id, b.name, a.total, a.status 
+    FROM {PATROL_TABLE} a 
+    JOIN `profile` b ON a.pid = b.id
+    WHERE a.del_flag = 0
+"""
+    cmd += ' ORDER BY id DESC' + ' LIMIT {}, {}'.format((page - 1) * PAGE_SIZE, PAGE_SIZE)
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             # 计算总页数
-            await cur.execute(f"SELECT COUNT(*) FROM {PATROL_TABLE}")
+            await cur.execute(f"SELECT COUNT(*) FROM {PATROL_TABLE} WHERE del_flag = 0")
             sum_of_equipment = (await cur.fetchone())[0]
             total_page = sum_of_equipment // PAGE_SIZE
             if sum_of_equipment % PAGE_SIZE:
@@ -762,7 +769,7 @@ WHERE a.`{fd}`=%s\
 
 
 @routes.patch('/resendMaintenanceEmail')
-async def resend_email(request: Request):
+async def resend_maintenance_email(request: Request):
     case_id = get_case_id(request)
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -781,3 +788,23 @@ async def resend_email(request: Request):
     except RuntimeError:
         return code_response(ConflictStatusResponse)
 
+
+@routes.patch('/resendPatrolEmail')
+async def resend_patrol_email(request: Request):
+    case_id = get_case_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT `content` FROM `email_history` WHERE `case_id`=%s", case_id)
+            row = await cur.fetchone()
+            await conn.commit()
+            if row:
+                return code_response(AlreadySendEmailResponse)
+    try:
+        _mid, _to_address, _captcha = await get_email_meta(request, case_id, 'patrol_meta')
+        try:
+            await send_patrol_email(request, _mid, case_id, _captcha, _to_address)
+            return code_response(ResponseOk)
+        except RuntimeError:
+            return code_response(SendEmailTimeoutResponse)
+    except RuntimeError:
+        return code_response(ConflictStatusResponse)

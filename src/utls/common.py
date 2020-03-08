@@ -136,53 +136,74 @@ ORDER_TITLE = "{id_}故障工单"
 ORDER_CONTENT = "  {content}，请及时处理。处理验证码为：{captcha}"
 
 PATROL_TITLE = "{id_}巡检计划"
-PATROL_CONTENT = "有新的巡检计划。巡检验证码为：{captcha}\n{patrol_plan}"
+PATROL_CONTENT = "有新的巡检计划，合计 {total} 台设备。巡检验证码为：{captcha}"
 
 
 def create_captcha() -> str:  # 生成和更新验证码
     return str(random())[2: 8]
 
 
-async def set_captcha(request, mid, captcha):
+async def set_captcha(request, case_id, captcha):
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("INSERT INTO `captcha_meta` (case_id, captcha) VALUES (%s, %s)", (mid, captcha))
+            await cur.execute("INSERT INTO `captcha_meta` (case_id, captcha) VALUES (%s, %s)", (case_id, captcha))
             await conn.commit()
 
 
-async def update_captcha(request, mid, captcha):
+async def update_captcha(request, case_id, captcha):
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("UPDATE `captcha_meta` SET captcha=%s WHERE case_id=%s)", (captcha, mid))
+            await cur.execute("UPDATE `captcha_meta` SET captcha=%s WHERE case_id=%s)", (captcha, case_id))
             await conn.commit()
 
 
-async def send_maintenance_order_email(request, oid: str, order_id: str, captcha: str, to_address: str):
+async def send_maintenance_order_email(request, oid: str, case_id: str, captcha: str, to_address: str):
     msg = EmailMessage()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT `content` FROM `order_history` WHERE `status`='R' AND oid=%s", oid)
             row = await cur.fetchone()
             if row:
-                msg['Subject'] = ORDER_TITLE.format(id_=order_id)
+                msg['Subject'] = ORDER_TITLE.format(id_=case_id)
                 content = ORDER_CONTENT.format(content=row[0], captcha=captcha)
                 msg.set_content(content)
                 await conn.commit()
             else:  # 没有对应工单的内容
                 raise RuntimeError
     await send_email(msg, to_address)
-    await store_email_content(request, order_id, to_address, captcha, content)
+    await store_email_content(request, case_id, to_address, captcha, content)
     try:  # 重发的时候会重复插入
-        await set_captcha(request, order_id, captcha)
+        await set_captcha(request, case_id, captcha)
     except IntegrityError:
         pass
 
 
-async def store_email_content(request, order_id, email, captcha, content):
+async def send_patrol_email(request, pid: str, case_id: str, captcha: str, to_address: str):
+    msg = EmailMessage()
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT `total` FROM `patrol_meta` WHERE id=%s", pid)
+            row = await cur.fetchone()
+            if row:
+                msg['Subject'] = PATROL_TITLE.format(id_=case_id)
+                content = PATROL_CONTENT.format(total=row[0], captcha=captcha)
+                msg.set_content(content)
+                await conn.commit()
+            else:  # 没有对应工单的内容
+                raise RuntimeError
+    await send_email(msg, to_address)
+    await store_email_content(request, case_id, to_address, captcha, content)
+    try:  # 重发的时候会重复插入
+        await set_captcha(request, case_id, captcha)
+    except IntegrityError:
+        pass
+
+
+async def store_email_content(request, case_id, email, captcha, content):
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("INSERT INTO `email_history` (case_id, email, captcha, content) VALUES (%s, %s, %s, %s)",
-                              (order_id, email, captcha, content))
+                              (case_id, email, captcha, content))
             await conn.commit()
 
 
