@@ -120,3 +120,13 @@ class MissEmailContentResponse(ErrcodeABC):
 class AlreadySendEmailResponse(ErrcodeABC):
     errcode = 100018
     errmsg = '已发送邮件通知'
+
+
+class SmsLimitResponse(ErrcodeABC):
+    errcode = 100019
+    errmsg = '发送短信过于频繁，请稍后尝试'
+
+
+class SendSmsErrorResponse(ErrcodeABC):
+    errcode = 100020
+    errmsg = '短信发送失败'

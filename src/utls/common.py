@@ -1,17 +1,24 @@
+import base64
 from collections import namedtuple
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from hashlib import sha1
+import hmac
+from json import loads
 import socket
 import platform
 from random import random
 
-from aiosmtplib import SMTP, SMTPTimeoutError
+from aliyunsdkcore.auth.composer.rpc_signature_composer import get_signed_url
+from aiohttp import ClientSession, ClientTimeout, ClientError, ContentTypeError
 from aiohttp.web import Request
+from aiosmtplib import SMTP, SMTPTimeoutError
 from jwt import encode as jwt_encode
 from qrcode import make as qrcode_make
 from pymysql.err import IntegrityError
 from werkzeug.security import check_password_hash
 
+from src.meta.exception import SmsLimitException
 from src.settings import config
 
 CACHE_EXPIRE_TIME = 15 * 60
@@ -114,11 +121,58 @@ else:
 
 def get_qrcode(eid):
     """ 生成二维码 """
-    return qrcode_make('http://{}/query?eid={}'.format(HOST, eid), box_size=5)
+    return qrcode_make('https://{}/query?eid={}'.format(HOST, eid), box_size=5)
 
 
-async def send_sms(phone):
+SMS_REDIS_KEY = 'eid:{eid}'
+SMS_TIMEOUT = 300
+
+
+async def send_ali_sms(phone: str, captcha: str):
+    params = {
+        # "AccessKeyId": config['sms']['ali']['AccessKeyId'],
+        # "Timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        # "Format": "JSON",
+        # "SignatureMethod": "HMAC-SHA1",
+        # "SignatureVersion": "1.0",
+        # "SignatureNonce": uuid4().hex,
+        # "Signature": "",
+        "Action": "SendSms",
+        "Version": "2017-05-25",
+        "RegionId": "cn-hangzhou",
+        "PhoneNumbers": phone,
+        "SignName": config['sms']['ali']['SignName'],
+        "TemplateCode": config['sms']['ali']['TemplateCode'],
+        "TemplateParam": {"code": captcha},
+    }
+    uri = config['sms']['ali']['uri'] + get_signed_url(params, config['sms']['ali']['AccessKeyId'],
+                                                       config['sms']['ali']['Secret'], 'JSON', 'GET', {})[0]
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=3)) as session:
+            async with session.get(uri) as resp:
+                try:
+                    data = await resp.json()
+                except ContentTypeError:
+                    data = loads(await resp.text())
+    except ClientError:
+        raise RuntimeError
+    try:
+        assert data['code'] == 'OK'
+    except KeyError:
+        raise RuntimeError
+    except AssertionError:
+        if 'LIMIT' in data['code']:
+            raise SmsLimitException
+        else:
+            raise RuntimeError
+
+
+async def send_sms(request, eid, phone):
     pass
+
+
+async def check_sms_captcha(request: Request, phone: str, captcha: str) -> bool:
+    return True
 
 
 try:
@@ -218,10 +272,6 @@ async def send_email(msg: EmailMessage, to_address: str):  # 超时raise Timeout
         raise TimeoutError
 
 
-async def check_captcha(request: Request, phone: str, captcha: str) -> bool:
-    return True
-
-
 async def set_config(request: Request, key: str, value: str):
     _key = f'it:config:{key}'
     await request.app['redis'].set(
@@ -261,19 +311,24 @@ async def get_config(request: Request, key: str):
 
 
 if __name__ == '__main__':
-    pass
-#     smtp_server = "smtp.exmail.qq.com"
-#     smtp_port = 465
-#     smtp_name = 'admin@aquazhuhai.com'
-#     smtp_password = 'Aa2968932'
-#
-#     msg = EmailMessage()
-#     msg.set_content("""\
-# {department}的{equipment}出现故障，请尽快处理。验证码为：{captcha}
-# """.format(department="a", equipment='b', captcha='c'))
-#     msg['Subject'] = '{order_id}故障工单'.format(order_id='202002004')
-#     msg['From'] = '珠海市供水有限公司<admin@aquazhuhai.com>'
-#     msg['To'] = 'kkkcomkkk@qq.com'
-#     with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
-#         server.login(smtp_name, smtp_password)
-#         server.send_message(msg, from_addr='admin@aquazhuhai.com')
+    # pass
+    #     smtp_server = "smtp.exmail.qq.com"
+    #     smtp_port = 465
+    #     smtp_name = 'admin@aquazhuhai.com'
+    #     smtp_password = 'Aa2968932'
+    #
+    #     msg = EmailMessage()
+    #     msg.set_content("""\
+    # {department}的{equipment}出现故障，请尽快处理。验证码为：{captcha}
+    # """.format(department="a", equipment='b', captcha='c'))
+    #     msg['Subject'] = '{order_id}故障工单'.format(order_id='202002004')
+    #     msg['From'] = '珠海市供水有限公司<admin@aquazhuhai.com>'
+    #     msg['To'] = 'kkkcomkkk@qq.com'
+    #     with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+    #         server.login(smtp_name, smtp_password)
+    #         server.send_message(msg, from_addr='admin@aquazhuhai.com')
+    import asyncio
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(send_ali_sms('13532227149', '123456'))
+
