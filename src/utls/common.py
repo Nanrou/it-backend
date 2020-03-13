@@ -124,8 +124,9 @@ def get_qrcode(eid):
     return qrcode_make('https://{}/query?eid={}'.format(HOST, eid), box_size=5)
 
 
-SMS_REDIS_KEY = 'eid:{eid}'
-SMS_TIMEOUT = 300
+SMS_REDIS_KEY = 'eid:{eid}:report'
+SMS_REDIS_VALUE = '{phone}|{captcha}'
+SEND_SMS_INTERVAL = 300
 
 
 async def send_ali_sms(phone: str, captcha: str):
@@ -157,22 +158,40 @@ async def send_ali_sms(phone: str, captcha: str):
     except ClientError:
         raise RuntimeError
     try:
-        assert data['code'] == 'OK'
+        assert data['Code'] == 'OK'
     except KeyError:
         raise RuntimeError
     except AssertionError:
-        if 'LIMIT' in data['code']:
+        if 'LIMIT' in data['Code']:
             raise SmsLimitException
         else:
             raise RuntimeError
 
 
 async def send_sms(request, eid, phone):
-    pass
+    _key = SMS_REDIS_KEY.format(eid=eid)
+    _exist = await request.app['redis'].get(_key)
+    if _exist:
+        raise SmsLimitException
+    else:
+        _captcha = create_captcha()
+        await send_ali_sms(phone, _captcha)
+        await request.app['redis'].set(key=_key,
+                                       value=SMS_REDIS_VALUE.format(phone=phone, captcha=_captcha),
+                                       expire=SEND_SMS_INTERVAL)
 
 
-async def check_sms_captcha(request: Request, phone: str, captcha: str) -> bool:
-    return True
+async def check_sms_captcha(request: Request, eid: str, phone: str, captcha: str) -> bool:
+    _key = SMS_REDIS_KEY.format(eid=eid)
+    _value = await request.app['redis'].get(_key)
+    if _value:
+        _p, _c = _value.split('|')
+        return (_p == phone) and (_c == captcha)
+    else:
+        return False
+
+
+# 邮件发送是做持久化记录的，短信不记录
 
 
 try:

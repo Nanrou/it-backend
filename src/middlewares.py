@@ -35,6 +35,7 @@ WITHOUT_VERIFY = [
     # ('/api/order-flow-wap', 'GET'),
     # ('/api/maintenance/patrol', 'POST'),
     ('/api/maintenance/singlePatrolPlanList', 'GET'),
+    ('/api/maintenance/captcha', 'GET'),
 ]
 
 MODULE_PERMISSION = {

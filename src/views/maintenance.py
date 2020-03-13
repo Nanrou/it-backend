@@ -2,16 +2,19 @@ from datetime import datetime
 from json import JSONDecodeError
 
 from aiohttp.web import Request
+from aiohttp.web_exceptions import HTTPForbidden
 from pymysql.err import IntegrityError
 
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, ConflictStatusResponse, \
     InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse, \
-    EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse, MissEmailContentResponse, \
-    SendEmailTimeoutResponse, AlreadySendEmailResponse
+    EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse, \
+    MissEmailContentResponse, SendEmailTimeoutResponse, AlreadySendEmailResponse, SmsLimitResponse, SendSmsErrorResponse
 from src.views.equipment import get_equipment_id
+from src.meta.exception import SmsLimitException
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import get_cache_version, send_maintenance_order_email, check_captcha, create_captcha, send_patrol_email
+from src.utls.common import get_cache_version, send_maintenance_order_email, check_sms_captcha, create_captcha, \
+    send_patrol_email, send_sms
 
 routes = PrefixRouteTableDef('/api/maintenance')
 
@@ -225,7 +228,7 @@ async def report_order(request: Request):  # {eid, reportForm}
         return code_response(InvalidFormFIELDSResponse)
     _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if await check_captcha(request, _report_form['phone'], _report_form['captcha']):
+    if await check_sms_captcha(request, _eid, _report_form['phone'], _report_form['captcha']):
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
                 # 确认设备状态为正常
@@ -293,7 +296,20 @@ async def create_order(request: Request):
 @routes.get('/captcha')
 async def get_captcha(request: Request):
     # check name & work number
-    pass
+    _eid = get_equipment_id(request)
+    try:
+        _phone = request.query['phone']
+    except KeyError:
+        raise HTTPForbidden(text='Miss phone')
+
+    try:
+        await send_sms(request, _eid, _phone)
+    except RuntimeError:
+        return code_response(SendSmsErrorResponse)
+    except SmsLimitException:
+        return code_response(SmsLimitResponse)
+
+    return code_response(ResponseOk)
 
 
 @routes.patch('/remote')
@@ -486,7 +502,7 @@ async def appraisal(request: Request):
     except (KeyError, AssertionError, JSONDecodeError):
         return code_response(InvalidFormFIELDSResponse)
 
-    if await check_captcha(request, _appraisal_form['phone'], _appraisal_form['captcha']):
+    if await check_sms_captcha(request, _oid, _appraisal_form['phone'], _appraisal_form['captcha']):
         _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         _name = _appraisal_form['name']
         _phone = _appraisal_form['phone']
@@ -526,7 +542,7 @@ async def cancel(request: Request):  # data { name, phone, remark, captcha }
         )
     except KeyError:
         return code_response(InvalidFormFIELDSResponse)
-    if await check_captcha(request, _phone, _captcha):
+    if await check_sms_captcha(request, _eid, _phone, _captcha):
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
                 # 更新order
