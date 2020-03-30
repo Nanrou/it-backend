@@ -3,14 +3,14 @@ import os
 from aiohttp import web
 
 from src.db.connection import open_connection, close_connection, init_bf, clear_bf
-from src.settings import config, DOWNLOAD_DIR
+from src.settings import CONFIG, DOWNLOAD_DIR
 from src.routes import setup_routes
 from src.middlewares import verify_jwt_token
 
 
 def app_factory():
     app = web.Application(middlewares=[verify_jwt_token])
-    app['config'] = config
+    app['config'] = CONFIG
     setup_routes(app)
     app.add_routes([
         web.static('/api/download', DOWNLOAD_DIR, show_index=False, follow_symlinks=True, append_version=False)

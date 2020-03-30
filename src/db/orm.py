@@ -1,14 +1,14 @@
 from peewee import MySQLDatabase, CharField, BooleanField, Field, DateTimeField, IntegerField, SQL, Model, DateField
 from werkzeug.security import generate_password_hash
 
-from src.settings import config
+from src.settings import CONFIG
 
 MySQL_DB = MySQLDatabase(
-    host=config["mysql"]["host"],
-    port=config["mysql"]["port"],
-    user=config["mysql"]["user"],
-    password=config["mysql"]["password"],
-    database=config["mysql"]["database"]
+    host=CONFIG["mysql"]["host"],
+    port=CONFIG["mysql"]["port"],
+    user=CONFIG["mysql"]["user"],
+    password=CONFIG["mysql"]["password"],
+    database=CONFIG["mysql"]["database"]
 )
 
 
@@ -19,6 +19,8 @@ class TinyInt(Field):
 class ModelBase(Model):
     class Meta:
         database = MySQL_DB
+
+# todo add wechat userID
 
 
 class Profile(ModelBase):

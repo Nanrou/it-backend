@@ -19,7 +19,7 @@ from pymysql.err import IntegrityError
 from werkzeug.security import check_password_hash
 
 from src.meta.exception import SmsLimitException
-from src.settings import config
+from src.settings import CONFIG
 
 CACHE_EXPIRE_TIME = 15 * 60
 
@@ -142,12 +142,12 @@ async def send_ali_sms(phone: str, captcha: str):
         "Version": "2017-05-25",
         "RegionId": "cn-hangzhou",
         "PhoneNumbers": phone,
-        "SignName": config['sms']['ali']['SignName'],
-        "TemplateCode": config['sms']['ali']['TemplateCode'],
+        "SignName": CONFIG['sms']['ali']['SignName'],
+        "TemplateCode": CONFIG['sms']['ali']['TemplateCode'],
         "TemplateParam": {"code": captcha},
     }
-    uri = config['sms']['ali']['uri'] + get_signed_url(params, config['sms']['ali']['AccessKeyId'],
-                                                       config['sms']['ali']['Secret'], 'JSON', 'GET', {})[0]
+    uri = CONFIG['sms']['ali']['uri'] + get_signed_url(params, CONFIG['sms']['ali']['AccessKeyId'],
+                                                       CONFIG['sms']['ali']['Secret'], 'JSON', 'GET', {})[0]
     try:
         async with ClientSession(timeout=ClientTimeout(total=3)) as session:
             async with session.get(uri) as resp:
@@ -196,11 +196,11 @@ async def check_sms_captcha(request: Request, eid: str, phone: str, captcha: str
 
 try:
     SMTP_DATA = {
-        'username': config['smtp']['username'],
-        'password': config['smtp']['password'],
-        'server': config['smtp']['server'],
-        'port': config['smtp']['port'],
-        'From': config['smtp']['From']
+        'username': CONFIG['smtp']['username'],
+        'password': CONFIG['smtp']['password'],
+        'server': CONFIG['smtp']['server'],
+        'port': CONFIG['smtp']['port'],
+        'From': CONFIG['smtp']['From']
     }
 except KeyError:
     raise RuntimeError('Cant send email without smtp data')
@@ -308,9 +308,9 @@ async def get_config(request: Request, key: str):
     :return:
     """
     _key = f'it:config:{key}'
-    config = await request.app['redis'].get(_key)
-    if config:
-        return config
+    _config = await request.app['redis'].get(_key)
+    if _config:
+        return _config
     else:
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
@@ -324,7 +324,6 @@ async def get_config(request: Request, key: str):
                     return _config
                 else:
                     await conn.commit()
-
 
 # cache 版本号+内容缓存 服务端
 

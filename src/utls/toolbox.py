@@ -6,7 +6,7 @@ from aiohttp.web_exceptions import HTTPForbidden
 from aiomysql.pool import Pool
 from hashids import Hashids
 
-from src.settings import config
+from src.settings import CONFIG
 
 
 class LocalHashids(Hashids):
@@ -19,7 +19,7 @@ class LocalHashids(Hashids):
 
 
 # todo 应该是每个模块用不同的salt
-ItHashids = LocalHashids(salt=config.get('jwt-secret'), min_length=8)
+ItHashids = LocalHashids(salt=CONFIG.get('jwt-secret'), min_length=8)
 
 
 class PrefixRouteTableDef(RouteTableDef):

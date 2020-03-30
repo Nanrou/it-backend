@@ -6,7 +6,7 @@ from peewee import CharField, BooleanField, IntegerField, SQL
 
 from src.db.orm import ModelBase, MySQL_DB
 from src.utls.toolbox import Tree
-from src.settings import config
+from src.settings import CONFIG
 
 
 class DepartmentMeta(ModelBase):
@@ -40,16 +40,16 @@ class DepartmentRelation(ModelBase):
 
 def init_department():
     async def inner_func(loop):
-        if config["mysql"]["host"] == 'localhost':
+        if CONFIG["mysql"]["host"] == 'localhost':
             pass
         else:
             raise RuntimeError("init prod ?")
         pool = await create_mysql_pool(
-            host=config["mysql"]["host"],
-            port=config["mysql"]["port"],
-            user=config["mysql"]["user"],
-            password=config["mysql"]["password"],
-            db=config["mysql"]["database"],
+            host=CONFIG["mysql"]["host"],
+            port=CONFIG["mysql"]["port"],
+            user=CONFIG["mysql"]["user"],
+            password=CONFIG["mysql"]["password"],
+            db=CONFIG["mysql"]["database"],
             loop=loop)
         MySQL_DB.drop_tables([DepartmentMeta, DepartmentRelation])
         MySQL_DB.create_tables([DepartmentMeta, DepartmentRelation])
