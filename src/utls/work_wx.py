@@ -1,4 +1,5 @@
 from urllib.parse import urlencode
+from re import search
 
 from aiohttp import ClientSession, ClientTimeout, ServerTimeoutError, ContentTypeError
 from aiohttp.web import Request
@@ -58,14 +59,22 @@ async def get_wx_user_id(request: Request, code: str) -> str:
         return ''
 
 
-# return name, mobile, u_id
+# return name, work_number, mobile, u_id
 async def get_wx_user_info(request: Request, user_id: str):
     data = await handle_wechat_api(GET_USER, {
         'access_token': await get_wx_access_token(request),
         'userid': user_id,
     })
+    # 分割姓名和工号
+    patter = search(r'\d+', data['name'])
+    if patter:
+        work_number = patter.group()
+        data['name'].replace(work_number, '')
+    else:
+        work_number = ''
     return {
         'name': data['name'],
+        'work_number': work_number,
         'mobile': data['mobile'],
         'wx_id': user_id,
     }
