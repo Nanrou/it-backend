@@ -12,17 +12,20 @@ from src.meta.response_code import InvalidTokenResponse, RepetitionLoginResponse
 
 """
 检查登陆状态 -> 是否重复登录 -> 检查权限
+           |(wechat扫码)
+           -> 判断是否公司员工
 """
 
 WITHOUT_VERIFY = [
     ('/api/user/login', 'POST'),
     ('/api/user/logout', 'GET'),
+    ('/api/user/wx-login', 'GET'),
     # 以下都是为移动端服务的
-    ('/api/equipment/detail', 'GET'),
-    ('/api/maintenance/report', 'POST'),
-    ('/api/maintenance/arrival', 'PATCH'),
-    ('/api/maintenance/fix', 'PATCH'),
-    ('/api/maintenance/appraisal', 'PATCH'),
+    # ('/api/equipment/detail', 'GET'),
+    # ('/api/maintenance/report', 'POST'),
+    # ('/api/maintenance/arrival', 'PATCH'),
+    # ('/api/maintenance/fix', 'PATCH'),
+    # ('/api/maintenance/appraisal', 'PATCH'),
     # ('/api/order', 'POST'),
     # ('/api/equipment', 'GET'),
     # ('/api/captcha', 'GET'),
@@ -34,8 +37,8 @@ WITHOUT_VERIFY = [
     # ('/api/history-order-wap', 'GET'),
     # ('/api/order-flow-wap', 'GET'),
     # ('/api/maintenance/patrol', 'POST'),
-    ('/api/maintenance/singlePatrolPlanList', 'GET'),
-    ('/api/maintenance/captcha', 'GET'),
+    # ('/api/maintenance/singlePatrolPlanList', 'GET'),
+    # ('/api/maintenance/captcha', 'GET'),
 ]
 
 MODULE_PERMISSION = {

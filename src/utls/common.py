@@ -45,7 +45,7 @@ async def verify_login(pool, username_tuple, password) -> namedtuple:
             )
             r = await cur.fetchone()
             await conn.commit()
-            if r and check_password_hash(r[-2], password):  # todo 避免写死
+            if r and check_password_hash(r[-3], password):  # todo 避免写死
                 return dict_to_object('profile', [d[0] for d in cur.description], r)
 
 

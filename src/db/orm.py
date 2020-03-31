@@ -20,8 +20,6 @@ class ModelBase(Model):
     class Meta:
         database = MySQL_DB
 
-# todo add wechat userID
-
 
 class Profile(ModelBase):
     """
@@ -35,15 +33,17 @@ class Profile(ModelBase):
     role:              角色
     password_hash:
     email:             邮箱地址，派工维修的时候再设为必填
+    wx_id:             企业微信的user id
     """
     username = CharField(max_length=16)
     work_number = CharField(max_length=8)
     name = CharField(max_length=16)
-    department = CharField(max_length=32)
-    phone = CharField(max_length=16)
+    department = CharField(max_length=32, null=True)
+    phone = CharField(max_length=16, null=True)
     role = TinyInt()
     password_hash = CharField(max_length=128)
     email = CharField(max_length=128, null=True)
+    wx_id = CharField(max_length=128, null=True)
 
     @property
     def password(self):
@@ -53,12 +53,10 @@ class Profile(ModelBase):
     def password(self, password):
         self.password_hash = generate_password_hash(password)
 
-    class Meta:
-        indexes = (
-            (('work_number', 'username'), True),
-        )
+    # 数据量太少，做索引没意义
 
 
+# todo 别人的唯一ID
 class Equipment(ModelBase):
     """
     设备资料

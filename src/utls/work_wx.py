@@ -54,16 +54,27 @@ async def get_wx_user_id(request: Request, code: str) -> str:
     })
     try:
         return data['UserId']
-    except KeyError:
+    except (KeyError, TypeError):
         return ''
 
 
-async def get_wx_user_info(request: Request, user_id: str) -> str:
+# return name, mobile, u_id
+async def get_wx_user_info(request: Request, user_id: str):
     data = await handle_wechat_api(GET_USER, {
         'access_token': await get_wx_access_token(request),
         'userid': user_id,
     })
-    # todo return what?
+    return {
+        'name': data['name'],
+        'mobile': data['mobile'],
+        'wx_id': user_id,
+    }
+
+
+async def get_wx_user(request: Request, code: str) -> dict or None:
+    u_id = await get_wx_user_id(request, code)
+    if u_id:
+        return get_wx_user_info(request, u_id)
 
 
 if __name__ == '__main__':

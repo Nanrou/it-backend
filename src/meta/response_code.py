@@ -130,3 +130,14 @@ class SmsLimitResponse(ErrcodeABC):
 class SendSmsErrorResponse(ErrcodeABC):
     errcode = 100020
     errmsg = '短信发送失败'
+
+
+class PrivacyWarningResponse(ErrcodeABC):
+    errcode = 100021
+    errmsg = '本系统为内部系统，请联系管理员绑定企业微信'
+
+
+class NeedBindingResponse(ErrcodeABC):
+    errcode = 100022
+    errmsg = '需执行绑定操作'
+

@@ -9,9 +9,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from src.meta.permission import Permission
 from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidOriginPasswordResponse, \
-    RepetitionUserResponse, InvalidFormFIELDSResponse
+    RepetitionUserResponse, InvalidFormFIELDSResponse, MissRequiredFieldsResponse, PrivacyWarningResponse, \
+    NeedBindingResponse
+from src.utls.common import verify_login, set_config, dict_to_object
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import verify_login, set_config
+from src.utls.work_wx import get_wx_user
 
 routes = PrefixRouteTableDef('/api/user')
 USER_FORM_FIELDS = {'workNumber': 'work_number', 'name': 'name', 'phone': 'phone', 'role': 'role',
@@ -53,9 +55,53 @@ async def login(request: Request):
         return code_response(InvalidUserDataResponse)
 
 
+@routes.get('/wx-login')
+async def wx_login(request: Request):
+    try:
+        code = request.query['code']
+    except KeyError:
+        return code_response(MissRequiredFieldsResponse)
+    user = await get_wx_user(request, code)
+    if user:
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                # wx id和name都在库中，代表已注册过了
+                await cur.execute(
+                    "SELECT * FROM profile WHERE username=%s AND wx_id=%s", (user['name'], user['wx_id']))
+                row = await cur.fetchone()
+                if row:
+                    user = dict_to_object('profile', [d[0] for d in cur.description], row)
+                    jwt_token = jwt_encode({
+                        'uid': ItHashids.encode(user.id),
+                        'name': user.name,
+                        'dep': user.department,
+                        'rol': user.role,
+                        'pho': user.phone,
+                        'email': user.email,
+                        'iat': round(datetime.now().timestamp()),
+                        'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
+                    }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
+                    await request.app['redis'].set('{}:{}:jwt'.format(user.name, user.department), jwt_token,
+                                                   expire=60 * 60 * 24)  # 这是为了禁止重复登录
+                    return code_response(ResponseOk, {
+                        'token': jwt_token,
+                        'user': {
+                            'name': user.name,
+                            'department': user.department,
+                            'role': user.role,
+                            'phone': user.phone,
+                            'email': user.email,
+                        }
+                    })
+                else:
+                    return code_response(NeedBindingResponse)
+    else:
+        return code_response(PrivacyWarningResponse)
+
+
 @routes.get('/logout')
 async def logout(request: Request):
-    await request.app['black_bf'].insert(request.headers.get('Authorization').split(' ')[-1])
+    await request.app['black_bf'].insert(request.headers.get('Authorization', default='').split(' ')[-1])
     return code_response(ResponseOk)
 
 
@@ -80,7 +126,7 @@ async def change_password(request: Request):
                 "SELECT * FROM profile WHERE id=%s", (request['jwt_content'].get('uid'),))
             r = await cur.fetchone()
             await conn.commit()
-            if r and check_password_hash(r[-1], data.get('originPassword')):
+            if r and check_password_hash(r[-3], data.get('originPassword')):
                 await cur.execute('UPDATE profile SET password_hash=%s WHERE id=%s',
                                   (generate_password_hash(data.get('newPassword')), request['jwt_content'].get('uid')))
                 await conn.commit()
@@ -127,7 +173,7 @@ async def query(request: Request):
                     'department': row[4],
                     'phone': row[5],
                     'role': row[6],
-                    'email': row[-1],
+                    'email': row[-2],
                 })
             await conn.commit()
     return code_response(ResponseOk, data)
