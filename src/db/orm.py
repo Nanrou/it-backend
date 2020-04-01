@@ -233,7 +233,8 @@ class ItConfig(ModelBase):
     key = CharField(max_length=32, unique=True)
     value = CharField(max_length=32)
 
-    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S', constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
+                                 constraints=[SQL('DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')])
 
     class Meta:
         table_name = 'it_config'

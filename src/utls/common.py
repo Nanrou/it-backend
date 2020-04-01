@@ -243,7 +243,10 @@ async def send_maintenance_order_email(request, oid: str, case_id: str, captcha:
                 await conn.commit()
             else:  # 没有对应工单的内容
                 raise RuntimeError
-    await send_email(msg, to_address)
+            await cur.execute("SELECT `value` FROM `it_config` WHERE `key`=%s", 'sendEmail')
+            row = await cur.fetchone()
+            if row and row[0] == '1':
+                await send_email(msg, to_address)
     await store_email_content(request, case_id, to_address, captcha, content)
     try:  # 重发的时候会重复插入
         await set_captcha(request, case_id, captcha)
@@ -264,7 +267,10 @@ async def send_patrol_email(request, pid: str, case_id: str, captcha: str, to_ad
                 await conn.commit()
             else:  # 没有对应工单的内容
                 raise RuntimeError
-    await send_email(msg, to_address)
+            await cur.execute("SELECT `value` FROM `it_config` WHERE `key`=%s", 'sendEmail')
+            row = await cur.fetchone()
+            if row and row[0] == '1':
+                await send_email(msg, to_address)
     await store_email_content(request, case_id, to_address, captcha, content)
     try:  # 重发的时候会重复插入
         await set_captcha(request, case_id, captcha)
