@@ -285,11 +285,13 @@ class PatrolMeta(ModelBase):
     pid:                    当前处理人的ID
     total:                  计划内的设备总数
     status:                 0 进行中，1 已完成，2已取消
+    unfinished:             未完成的数量，每次check都会更新这个数
     """
     patrol_id = CharField(max_length=12)
     pid = IntegerField()
     total = IntegerField()
     status = TinyInt(constraints=[SQL('DEFAULT 0')])
+    finished = IntegerField()
 
     del_flag = BooleanField(constraints=[SQL('DEFAULT 0')])
     gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
@@ -331,6 +333,8 @@ if __name__ == '__main__':
     # MySQL_DB.create_tables([ItConfig])
     # ItConfig.insert({ItConfig.key: "sendSms", ItConfig.value: "0"}).execute()
     # ItConfig.insert({ItConfig.key: "sendEmail", ItConfig.value: "0"}).execute()
-    MySQL_DB.drop_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
-    MySQL_DB.create_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
+    # MySQL_DB.drop_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
+    # MySQL_DB.create_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
+    MySQL_DB.drop_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
+    MySQL_DB.create_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
     pass

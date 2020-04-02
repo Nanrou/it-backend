@@ -607,8 +607,9 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
         INSERT INTO `patrol_meta` (
             patrol_id,
             pid,
-            total
-        ) VALUES (%s, %s, %s)\
+            total,
+            unfinished
+        ) VALUES (%s, %s, %s, %s)\
 """
     d_cmd = """
         INSERT INTO `patrol_detail` (
@@ -620,7 +621,7 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             try:
-                await cur.execute(m_cmd, (_patrol_id, _pid, len(_eids)))
+                await cur.execute(m_cmd, (_patrol_id, _pid, len(_eids), len(_eids)))
             except IntegrityError:
                 return code_response(RepetitionOrderIdResponse)
             _last_row_id = cur.lastrowid
@@ -695,13 +696,14 @@ def get_patrol_detail_id(request: Request):
 
 @routes.get('/patrolDetail')
 async def get_patrol_detail(request: Request):
+    """ 查看巡检计划的所有设备 """
     pid = get_patrol_detail_id(request)
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""\
-            SELECT b.department, b.category, a.`check`, a.gmt_modified
+            SELECT b.`department`, b.`category`, a.`check`, a.`gmt_modified`, a.`id`, a`pid`
             FROM `patrol_detail` a
-            JOIN `equipment` b ON a.eid = b.id 
+            JOIN `equipment` b ON a.`eid` = `b.id` 
             WHERE `pid`=%s\
 """, pid)
             data = []
@@ -710,7 +712,9 @@ async def get_patrol_detail(request: Request):
                     'department': row[0],
                     'category': row[1],
                     'check': row[2],
-                    'checkTime': row[3].strftime('%Y-%m-%d')
+                    'checkTime': row[3].strftime('%Y-%m-%d'),
+                    'pdId': row[4],
+                    'pid': row[5]
                 })
             await conn.commit()
     return code_response(ResponseOk, data)
@@ -718,6 +722,7 @@ async def get_patrol_detail(request: Request):
 
 @routes.get('/singlePatrolPlanList')
 async def get_patrol_detail(request: Request):
+    """ 查看单个设备的巡检记录 """
     eid = get_equipment_id(request)
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -739,7 +744,24 @@ async def get_patrol_detail(request: Request):
 
 @routes.patch('/patrolCheck')
 async def patrol_check(request: Request):
-    pass
+    # todo check this
+    pid = get_query_params(request, 'pid')
+    pd_id = get_query_params(request, 'pdId')
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE `patrol_detail` SET `check`=1 WHERE `id`=%s AND `pid`=%s",
+                              (pd_id, pid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            await cur.execute("SELECT COUNT(*) FROM `patrol_detail` WHERE `pid`=%s AND `check`=0", pid)
+            row = await cur.fetchone()
+            if row:
+                if row[0] == 0:  # 如果全部check了则更新plan
+                    await cur.execute("UPDATE `patrol_meta` SET `status`=1, `unfinished`=0 WHERE `id`=%s", pid)
+                else:
+                    await cur.execute("UPDATE `patrol_meta` SET `unfinished`=%s WHERE `id`=%s", (row[0], pid))
+            await conn.commit()
+    return code_response(ResponseOk)
 
 
 def get_case_id(request: Request):
@@ -824,12 +846,17 @@ async def resend_patrol_email(request: Request):
         return code_response(ConflictStatusResponse)
 
 
-@routes.get('/personalPatrolPlan')
+@routes.get('/personalPatrol')
 async def get_personal_patrol_plan(request: Request):
     uid = ItHashids.decode(request['jwt_content']['uid'])
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT * FROM `patrol_meta` WHERE `pid`=%s AND `del_flag`=0 ORDER BY `id` DESC LIMIT 20",
+            await cur.execute("""\
+SELECT * FROM `patrol_meta`
+WHERE `pid`=%s AND `status`=0 AND `del_flag`=0
+ORDER BY `id`
+DESC LIMIT 20\
+""",
                               uid)
             res = []
             for row in await cur.fetchall():
@@ -849,7 +876,15 @@ async def get_personal_maintenance(request: Request):
     uid = ItHashids.decode(request['jwt_content']['uid'])
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT * FROM `order` WHERE `pid`=%s AND `del_flag`=0 ORDER BY `id` DESC LIMIT 20",
+            await cur.execute("""\
+SELECT a.`id`, a.`order_id`, a.`status`, a.`eid`, a.`equipment`, a.`department`, a.`reason`, b.`name`, b.`phone` 
+FROM `order` a
+JOIN `order_history` b
+ON a.`id` = b.`oid`
+WHERE a.`pid`=%s AND (a.`status` IN ('D', 'H')) AND a.`del_flag`=0 AND b.`status`='R'
+ORDER BY `id` 
+DESC LIMIT 20\
+            """,
                               uid)
             res = []
             for row in await cur.fetchall():
@@ -857,10 +892,12 @@ async def get_personal_maintenance(request: Request):
                     'oid': ItHashids.encode(row[0]),
                     'orderId': row[1],
                     'status': row[2],
-                    'eid': row[5],
-                    'equipment': row[6],
-                    'department': row[7],
-                    'reason': row[9],
+                    'eid': row[3],
+                    'equipment': row[4],
+                    'department': row[5],
+                    'reason': row[6],
+                    'name': row[7],
+                    'phone': row[8],
                 })
             await conn.commit()
         return code_response(ResponseOk, res)
