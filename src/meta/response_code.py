@@ -139,5 +139,5 @@ class PrivacyWarningResponse(ErrcodeABC):
 
 class NeedBindingResponse(ErrcodeABC):
     errcode = 100022
-    errmsg = '需执行绑定操作'
+    errmsg = '请先进行绑定或注册'
 

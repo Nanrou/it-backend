@@ -216,7 +216,6 @@ async def get_flow(request: Request):
     return code_response(ResponseOk, res)
 
 
-# 这是针对移动端未登录的
 @routes.post('/report')
 async def report_order(request: Request):  # {eid, reportForm}
     try:
@@ -295,7 +294,6 @@ async def create_order(request: Request):
 
 @routes.get('/captcha')
 async def get_captcha(request: Request):
-    # check name & work number
     _eid = get_equipment_id(request)
     try:
         _phone = request.query['phone']
@@ -824,3 +822,45 @@ async def resend_patrol_email(request: Request):
             return code_response(SendEmailTimeoutResponse)
     except RuntimeError:
         return code_response(ConflictStatusResponse)
+
+
+@routes.get('/personalPatrolPlan')
+async def get_personal_patrol_plan(request: Request):
+    uid = ItHashids.decode(request['jwt_content']['uid'])
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM `patrol_meta` WHERE `pid`=%s AND `del_flag`=0 ORDER BY `id` DESC LIMIT 20",
+                              uid)
+            res = []
+            for row in await cur.fetchall():
+                res.append({
+                    'pid': ItHashids.encode(row[0]),
+                    'patrolId': row[1],
+                    'total': row[3],
+                    'status': row[4],
+                    'gmt': row[6].strftime('%Y-%m-%d')
+                })
+            await conn.commit()
+        return code_response(ResponseOk, res)
+
+
+@routes.get('/personalMaintenance')
+async def get_personal_maintenance(request: Request):
+    uid = ItHashids.decode(request['jwt_content']['uid'])
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM `order` WHERE `pid`=%s AND `del_flag`=0 ORDER BY `id` DESC LIMIT 20",
+                              uid)
+            res = []
+            for row in await cur.fetchall():
+                res.append({
+                    'oid': ItHashids.encode(row[0]),
+                    'orderId': row[1],
+                    'status': row[2],
+                    'eid': row[5],
+                    'equipment': row[6],
+                    'department': row[7],
+                    'reason': row[9],
+                })
+            await conn.commit()
+        return code_response(ResponseOk, res)

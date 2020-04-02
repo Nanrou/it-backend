@@ -20,6 +20,54 @@ USER_FORM_FIELDS = {'workNumber': 'work_number', 'name': 'name', 'phone': 'phone
                     'department': 'department', 'username': 'username'}
 
 
+async def return_user_and_token(request: Request, user):
+    jwt_token = jwt_encode({
+        'uid': ItHashids.encode(user.id),
+        'name': user.name,
+        'dep': user.department,
+        'rol': user.role,
+        'pho': user.phone,
+        'email': user.email,
+        'iat': round(datetime.now().timestamp()),
+        'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
+    }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
+    await request.app['redis'].set('{}:{}:jwt'.format(user.name, user.department), jwt_token,
+                                   expire=60 * 60 * 24)  # 这是为了禁止重复登录
+    return code_response(ResponseOk, {
+        'token': jwt_token,
+        'user': {
+            'name': user.name,
+            'department': user.department,
+            'role': user.role,
+            'phone': user.phone,
+            'email': user.email,
+        }
+    })
+
+
+async def return_user_and_token_unregister(request: Request, user, resp):
+    jwt_token = jwt_encode({
+        'wxId': user['wx_id'],
+        'name': user['name'],
+        'number': user['number'],
+        'dep': '',
+        'pho': user['mobile'],
+        'iat': round(datetime.now().timestamp()),
+        'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
+    }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
+    await request.app['redis'].set('{}:unregister:jwt'.format(user['name']), jwt_token,
+                                   expire=60 * 5)  # 这是为了禁止重复登录
+    return code_response(resp, {
+        'token': jwt_token,
+        'user': {
+            'wxId': user['wx_id'],
+            'name': user['name'],
+            'number': user['number'],
+            'phone': user['mobile'],
+        }
+    })
+
+
 @routes.post('/login')
 async def login(request: Request):
     data = await request.json()
@@ -29,28 +77,7 @@ async def login(request: Request):
         _username = ('username', data.get('username'))
     user = await verify_login(request.app['mysql'], _username, data.get('password'))
     if user:
-        jwt_token = jwt_encode({
-            'uid': ItHashids.encode(user.id),
-            'name': user.name,
-            'dep': user.department,
-            'rol': user.role,
-            'pho': user.phone,
-            'email': user.email,
-            'iat': round(datetime.now().timestamp()),
-            'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
-        }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
-        await request.app['redis'].set('{}:{}:jwt'.format(user.name, user.department), jwt_token,
-                                       expire=60 * 60 * 24)  # 这是为了禁止重复登录
-        return code_response(ResponseOk, {
-            'token': jwt_token,
-            'user': {
-                'name': user.name,
-                'department': user.department,
-                'role': user.role,
-                'phone': user.phone,
-                'email': user.email,
-            }
-        })
+        return await return_user_and_token(request, user)
     else:
         return code_response(InvalidUserDataResponse)
 
@@ -66,37 +93,69 @@ async def wx_login(request: Request):
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
                 # wx id和name都在库中，代表已注册过了
-                await cur.execute(
-                    "SELECT * FROM profile WHERE username=%s AND wx_id=%s", (user['name'], user['wx_id']))
+                await cur.execute("SELECT * FROM profile WHERE name=%s AND wx_id=%s", (user['name'], user['wx_id']))
                 row = await cur.fetchone()
+                await conn.commit()
                 if row:
                     user = dict_to_object('profile', [d[0] for d in cur.description], row)
-                    jwt_token = jwt_encode({
-                        'uid': ItHashids.encode(user.id),
-                        'name': user.name,
-                        'dep': user.department,
-                        'rol': user.role,
-                        'pho': user.phone,
-                        'email': user.email,
-                        'iat': round(datetime.now().timestamp()),
-                        'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
-                    }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
-                    await request.app['redis'].set('{}:{}:jwt'.format(user.name, user.department), jwt_token,
-                                                   expire=60 * 60 * 24)  # 这是为了禁止重复登录
-                    return code_response(ResponseOk, {
-                        'token': jwt_token,
-                        'user': {
-                            'name': user.name,
-                            'department': user.department,
-                            'role': user.role,
-                            'phone': user.phone,
-                            'email': user.email,
-                        }
-                    })
+                    return await return_user_and_token(request, user)
                 else:
-                    return code_response(NeedBindingResponse)
+                    return await return_user_and_token_unregister(request, user, NeedBindingResponse)
     else:
         return code_response(PrivacyWarningResponse)
+
+
+@routes.patch('/wx-bind')
+async def wx_bind(request: Request):
+    wx_id = request['jwt_content']['wxId']
+    data = await request.json()
+    _username = ('username', data.get('username'))
+    user = await verify_login(request.app['mysql'], _username, data.get('password'))
+    if user:
+        async with request.app['mysql'].acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE profile SET wx_id=%s WHERE id=%s", (wx_id, user.id))
+                await conn.commit()
+        return await return_user_and_token(request, user)
+    else:
+        return code_response(InvalidUserDataResponse)
+
+
+@routes.post('/wx-register')
+async def wx_register(request: Request):
+    data = await request.json()
+    cmd = """\
+INSERT INTO profile (
+username,
+work_number,
+name,
+role,
+phone,
+password_hash,
+wx_id
+) VALUES (%s, %s, %s, %s, %s, %s, %s)\
+"""
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            try:
+                await cur.execute(cmd, (
+                    data.get('name') + data.get('number'),
+                    data.get('number'),
+                    data.get('name'),
+                    Permission.WRITE,
+                    data.get('phone'),
+                    generate_password_hash('8888'),
+                    request['jwt_content']['wxId'],
+                ))
+                _last_row_id = cur.lastrowid
+                await cur.execute("SELECT * FROM profile WHERE id=%s", _last_row_id)
+                row = await cur.fetchone()
+                await conn.commit()
+                if row:
+                    user = dict_to_object('profile', [d[0] for d in cur.description], row)
+                    return await return_user_and_token(request, user)
+            except IntegrityError:
+                return code_response(RepetitionUserResponse)
 
 
 @routes.get('/logout')

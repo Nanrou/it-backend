@@ -1,5 +1,6 @@
 from urllib.parse import urlencode
 from re import search
+import platform
 
 from aiohttp import ClientSession, ClientTimeout, ServerTimeoutError, ContentTypeError
 from aiohttp.web import Request
@@ -74,13 +75,21 @@ async def get_wx_user_info(request: Request, user_id: str):
         work_number = ''
     return {
         'name': data['name'],
-        'work_number': work_number,
+        'number': work_number,
         'mobile': data['mobile'],
         'wx_id': user_id,
     }
 
 
 async def get_wx_user(request: Request, code: str) -> dict or None:
+    # todo rm test
+    if platform.system() == 'Darwin':  # for test
+        return {
+            'name': 'root',
+            'number': '000',
+            'mobile': '1234',
+            'wx_id': 'www',
+        }
     u_id = await get_wx_user_id(request, code)
     if u_id:
         return get_wx_user_info(request, u_id)
