@@ -290,8 +290,8 @@ class PatrolMeta(ModelBase):
     patrol_id = CharField(max_length=12)
     pid = IntegerField()
     total = IntegerField()
+    unfinished = IntegerField()
     status = TinyInt(constraints=[SQL('DEFAULT 0')])
-    finished = IntegerField()
 
     del_flag = BooleanField(constraints=[SQL('DEFAULT 0')])
     gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',

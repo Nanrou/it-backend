@@ -639,7 +639,7 @@ async def get_patrol_plan(request: Request):
         return code_response(MissRequiredFieldsResponse)
 
     cmd = f"""\
-    SELECT a.id, a.patrol_id, b.name, a.total, a.status 
+    SELECT a.id, a.patrol_id, b.name, a.total, a.status, a.unfinished
     FROM {PATROL_TABLE} a 
     JOIN `profile` b ON a.pid = b.id
     WHERE a.del_flag = 0
@@ -663,6 +663,7 @@ async def get_patrol_plan(request: Request):
                     'name': row[2],
                     'total': row[3],
                     'status': row[4],
+                    'unfinished': row[5],
                 })
             await conn.commit()
 
@@ -701,9 +702,9 @@ async def get_patrol_detail(request: Request):
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""\
-            SELECT b.`department`, b.`category`, a.`check`, a.`gmt_modified`, a.`id`, a`pid`
+            SELECT b.`department`, b.`category`, a.`check`, a.`gmt_modified`, a.`id`, a.`pid`
             FROM `patrol_detail` a
-            JOIN `equipment` b ON a.`eid` = `b.id` 
+            JOIN `equipment` b ON a.`eid` = b.`id` 
             WHERE `pid`=%s\
 """, pid)
             data = []
@@ -713,8 +714,8 @@ async def get_patrol_detail(request: Request):
                     'category': row[1],
                     'check': row[2],
                     'checkTime': row[3].strftime('%Y-%m-%d'),
-                    'pdId': row[4],
-                    'pid': row[5]
+                    'pdId': ItHashids.encode(row[4]),
+                    'pid': ItHashids.encode(int(row[5])),
                 })
             await conn.commit()
     return code_response(ResponseOk, data)
@@ -744,7 +745,6 @@ async def get_patrol_detail(request: Request):
 
 @routes.patch('/patrolCheck')
 async def patrol_check(request: Request):
-    # todo check this
     pid = get_query_params(request, 'pid')
     pd_id = get_query_params(request, 'pdId')
     async with request.app['mysql'].acquire() as conn:
@@ -864,8 +864,9 @@ DESC LIMIT 20\
                     'pid': ItHashids.encode(row[0]),
                     'patrolId': row[1],
                     'total': row[3],
-                    'status': row[4],
-                    'gmt': row[6].strftime('%Y-%m-%d')
+                    'unfinished': row[4],
+                    'status': row[5],
+                    'gmt': row[7].strftime('%Y-%m-%d')
                 })
             await conn.commit()
         return code_response(ResponseOk, res)
