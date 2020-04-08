@@ -44,6 +44,7 @@ def init_department():
             pass
         else:
             raise RuntimeError("init prod ?")
+            pass
         pool = await create_mysql_pool(
             host=CONFIG["mysql"]["host"],
             port=CONFIG["mysql"]["port"],

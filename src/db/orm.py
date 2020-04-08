@@ -326,6 +326,9 @@ class PatrolDetail(ModelBase):
         )
 
 
+ALL_TABLES = [Profile, Equipment, EditHistory, ComputerDetail, WorkOrder, OrderHistory, ItConfig, CaptchaMeta,
+              EmailHistory, PatrolMeta, PatrolDetail]
+
 if __name__ == '__main__':
     # MySQL_DB.drop_tables([WorkOrder, OrderHistory])
     # MySQL_DB.create_tables([WorkOrder, OrderHistory])
