@@ -116,7 +116,7 @@ async def get_wx_user(request: Request, code: str) -> dict or None:
         }
     u_id = await get_wx_user_id(request, code)
     if u_id:
-        return get_wx_user_info(request, u_id)
+        return await get_wx_user_info(request, u_id)
 
 
 async def handle_jsapi_config(request: Request, uri: str):
