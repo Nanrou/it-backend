@@ -13,7 +13,7 @@ from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidO
     NeedBindingResponse
 from src.utls.common import verify_login, set_config, dict_to_object
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.work_wx import get_wx_user
+from src.utls.work_wx import get_wx_user, handle_jsapi_config
 
 routes = PrefixRouteTableDef('/api/user')
 USER_FORM_FIELDS = {'workNumber': 'work_number', 'name': 'name', 'phone': 'phone', 'role': 'role',
@@ -156,6 +156,12 @@ wx_id
                     return await return_user_and_token(request, user)
             except IntegrityError:
                 return code_response(RepetitionUserResponse)
+
+
+@routes.post('/wx-config')
+async def wx_config(request: Request):
+    data = await request.json()
+    return code_response(ResponseOk, await handle_jsapi_config(request, data['url']))
 
 
 @routes.get('/logout')

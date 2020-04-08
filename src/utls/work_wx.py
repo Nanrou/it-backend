@@ -1,6 +1,8 @@
-from urllib.parse import urlencode
-from re import search
+import hashlib
 import platform
+from time import time
+from re import search
+from secrets import token_hex
 
 from aiohttp import ClientSession, ClientTimeout, ServerTimeoutError, ContentTypeError
 from aiohttp.web import Request
@@ -12,9 +14,12 @@ WORK_WX_TOKEN_TIMEOUT = 7200
 ACCESS_TOKEN_API = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
 GET_USER_ID = "https://qyapi.weixin.qq.com/cgi-bin/user/getuserinfo"
 GET_USER = "https://qyapi.weixin.qq.com/cgi-bin/user/get"
+GET_JSAPI_TICKET = "https://qyapi.weixin.qq.com/cgi-bin/get_jsapi_ticket"
+WORK_WX_JSAPI_TICKET_KEY = "it:work:ticket"
 
 
 async def handle_wechat_api(base_url, params):
+    # todo handle exception
     try:
         async with ClientSession(timeout=ClientTimeout(total=5)) as session:
             async with session.get(base_url, params=params) as resp:
@@ -32,6 +37,7 @@ async def handle_wechat_api(base_url, params):
 
 
 async def get_wx_access_token(request: Request) -> str:
+    """ 获取access token """
     _ak = await request.app['redis'].get(WORK_WX_TOKEN_KEY)
     if _ak:
         return _ak
@@ -47,6 +53,24 @@ async def get_wx_access_token(request: Request) -> str:
     )
 
     return data['access_token']
+
+
+async def get_wx_jsapi_ticket(request: Request) -> str:
+    """ 获取jsapi ticket """
+    _ak = await request.app['redis'].get(WORK_WX_JSAPI_TICKET_KEY)
+    if _ak:
+        return _ak
+
+    data = await handle_wechat_api(GET_JSAPI_TICKET, {
+        'access_token': await get_wx_access_token(request)
+    })
+    await request.app['redis'].set(
+        key=WORK_WX_JSAPI_TICKET_KEY,
+        value=data['ticket'],
+        expire=WORK_WX_TOKEN_TIMEOUT,
+    )
+
+    return data['ticket']
 
 
 async def get_wx_user_id(request: Request, code: str) -> str:
@@ -95,9 +119,25 @@ async def get_wx_user(request: Request, code: str) -> dict or None:
         return get_wx_user_info(request, u_id)
 
 
+async def handle_jsapi_config(request: Request, uri: str):
+    """ 返回CONFIG的内容 """
+    noncestr = token_hex(16)
+    jsapi_ticket = await get_wx_jsapi_ticket(request)
+    timestamp = int(time())
+    signature = hashlib.sha1().update(
+        '&'.join([
+            f'jsapi_ticket={jsapi_ticket}',
+            f'noncestr={noncestr}',
+            f'timestamp={timestamp}',
+            f'url={uri}'
+        ]).encode()).hexdigest()
+    return {
+        'appId': CONFIG['wechat']['corpid'],
+        'timestamp': timestamp,
+        'noncestr': noncestr,
+        'signature': signature
+    }
+
+
 if __name__ == '__main__':
-    uri = ACCESS_TOKEN_API + urlencode({
-        'corpid': CONFIG['wechat']['corpid'],
-        'corpsecret': CONFIG['wechat']['Secret'],
-    })
-    print(uri)
+    pass
