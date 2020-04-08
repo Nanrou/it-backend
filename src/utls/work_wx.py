@@ -121,14 +121,14 @@ async def get_wx_user(request: Request, code: str) -> dict or None:
 
 async def handle_jsapi_config(request: Request, uri: str):
     """ 返回CONFIG的内容 """
-    noncestr = token_hex(16)
+    nonce_str = token_hex(16)
     jsapi_ticket = await get_wx_jsapi_ticket(request)
     timestamp = int(time())
     sha1 = hashlib.sha1()
     sha1.update(
         '&'.join([
             f'jsapi_ticket={jsapi_ticket}',
-            f'noncestr={noncestr}',
+            f'noncestr={nonce_str}',
             f'timestamp={timestamp}',
             f'url={uri}'
         ]).encode())
@@ -136,7 +136,7 @@ async def handle_jsapi_config(request: Request, uri: str):
     return {
         'appId': CONFIG['wechat']['corpid'],
         'timestamp': timestamp,
-        'noncestr': noncestr,
+        'nonceStr': nonce_str,
         'signature': signature
     }
 
