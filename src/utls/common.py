@@ -1,9 +1,6 @@
-import base64
 from collections import namedtuple
 from datetime import datetime, timedelta
 from email.message import EmailMessage
-from hashlib import sha1
-import hmac
 from json import loads
 import socket
 import platform

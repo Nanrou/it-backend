@@ -124,13 +124,15 @@ async def handle_jsapi_config(request: Request, uri: str):
     noncestr = token_hex(16)
     jsapi_ticket = await get_wx_jsapi_ticket(request)
     timestamp = int(time())
-    signature = hashlib.sha1().update(
+    sha1 = hashlib.sha1()
+    sha1.update(
         '&'.join([
             f'jsapi_ticket={jsapi_ticket}',
             f'noncestr={noncestr}',
             f'timestamp={timestamp}',
             f'url={uri}'
-        ]).encode()).hexdigest()
+        ]).encode())
+    signature = sha1.hexdigest()
     return {
         'appId': CONFIG['wechat']['corpid'],
         'timestamp': timestamp,
