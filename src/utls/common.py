@@ -107,6 +107,8 @@ def get_host_ip():
         _s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         _s.connect(('8.8.8.8', 80))
         ip = _s.getsockname()
+    except OSError:
+        return '127.0.0.1'
     finally:
         if _s:
             _s.close()
