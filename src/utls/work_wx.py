@@ -133,13 +133,6 @@ async def handle_jsapi_config(request: Request, uri: str):
             f'url={uri}'
         ]).encode())
     signature = sha1.hexdigest()
-    print('&'.join([
-            f'jsapi_ticket={jsapi_ticket}',
-            f'noncestr={nonce_str}',
-            f'timestamp={timestamp}',
-            f'url={uri}'
-        ]))
-    print(signature)
     return {
         'appId': CONFIG['wechat']['corpid'],
         'timestamp': timestamp,
