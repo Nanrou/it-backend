@@ -115,12 +115,12 @@ def get_host_ip():
 if platform.system() == 'Darwin':
     HOST = '{}:8082'.format(get_host_ip())
 else:
-    HOST = 'mobile.it.aquazhuhai.com'
+    HOST = 'it.aquazhuhai.com'
 
 
 def get_qrcode(eid):
     """ 生成二维码 """
-    return qrcode_make('https://{}/query?eid={}'.format(HOST, eid), box_size=5)
+    return qrcode_make('https://{}/equipment/detail?eid={}'.format(HOST, eid), box_size=5)
 
 
 SMS_REDIS_KEY = 'eid:{eid}:report'
