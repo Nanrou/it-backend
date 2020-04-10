@@ -46,8 +46,8 @@ StatusText = {
 }
 
 
-def get_equipment_id(request: Request):
-    return get_query_params(request, 'eid')
+def get_equipment_id(request: Request, decode=True):
+    return get_query_params(request, 'eid', decode)
 
 
 @routes.get('/query')
@@ -403,7 +403,7 @@ async def change_status(request: Request):
 @routes.get('/qrcode')
 async def equipment_qrcode(request: Request):
     qr_io = BytesIO()
-    get_qrcode(get_equipment_id(request)).save(qr_io)
+    get_qrcode(get_equipment_id(request, decode=False)).save(qr_io)
     return Response(body=qr_io.getvalue(), headers={'Content-Type': 'image/png'})
 
 
