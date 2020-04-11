@@ -227,7 +227,9 @@ async def report_order(request: Request):  # {eid, reportForm}
         return code_response(InvalidFormFIELDSResponse)
     _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if await check_sms_captcha(request, _eid, _report_form['phone'], _report_form['captcha']):
+    # 不上传验证码时就不检验了
+    if _data.get('captcha') == '' or await check_sms_captcha(request, _eid, _report_form['phone'],
+                                                             _report_form['captcha']):
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
                 # 确认设备状态为正常
