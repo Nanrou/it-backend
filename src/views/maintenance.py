@@ -749,10 +749,11 @@ async def get_patrol_detail(request: Request):
 async def patrol_check(request: Request):
     pid = get_query_params(request, 'pid')
     pd_id = get_query_params(request, 'pdId')
+    eid = get_query_params(request, 'eid')
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("UPDATE `patrol_detail` SET `check`=1 WHERE `id`=%s AND `pid`=%s",
-                              (pd_id, pid))
+            await cur.execute("UPDATE `patrol_detail` SET `check`=1 WHERE `id`=%s AND `pid`=%s AND `eid`=%s",
+                              (pd_id, pid, eid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
             await cur.execute("SELECT COUNT(*) FROM `patrol_detail` WHERE `pid`=%s AND `check`=0", pid)
@@ -887,8 +888,7 @@ ON a.`id` = b.`oid`
 WHERE a.`pid`=%s AND (a.`status` IN ('D', 'H')) AND a.`del_flag`=0 AND b.`status`='R'
 ORDER BY `id` 
 DESC LIMIT 20\
-            """,
-                              uid)
+            """, uid)
             res = []
             for row in await cur.fetchall():
                 res.append({

@@ -11,7 +11,7 @@ from src.meta.permission import Permission
 from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidOriginPasswordResponse, \
     RepetitionUserResponse, InvalidFormFIELDSResponse, MissRequiredFieldsResponse, PrivacyWarningResponse, \
     NeedBindingResponse
-from src.utls.common import verify_login, set_config, dict_to_object
+from src.utls.common import verify_login, set_config, dict_to_object, CONFIG_FIELDS
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
 from src.utls.work_wx import get_wx_user, handle_jsapi_config
 
@@ -361,9 +361,6 @@ WHERE id=%s
             await conn.commit()
 
     return code_response(ResponseOk)
-
-
-CONFIG_FIELDS = {"sendSms", "sendEmail"}
 
 
 @routes.get('/config')

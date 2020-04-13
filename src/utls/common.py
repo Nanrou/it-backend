@@ -168,6 +168,8 @@ async def send_ali_sms(phone: str, captcha: str):
 
 
 async def send_sms(request, eid, phone):
+    if not await get_config(request, "sendSms"):
+        return
     _key = SMS_REDIS_KEY.format(eid=eid)
     _exist = await request.app['redis'].get(_key)
     if _exist:
@@ -230,6 +232,8 @@ async def update_captcha(request, case_id, captcha):
 
 
 async def send_maintenance_order_email(request, oid: str, case_id: str, captcha: str, to_address: str):
+    if not await get_config(request, "sendEmail"):
+        return
     msg = EmailMessage()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -254,6 +258,8 @@ async def send_maintenance_order_email(request, oid: str, case_id: str, captcha:
 
 
 async def send_patrol_email(request, pid: str, case_id: str, captcha: str, to_address: str):
+    if not await get_config(request, "sendEmail"):
+        return
     msg = EmailMessage()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
@@ -294,6 +300,8 @@ async def send_email(msg: EmailMessage, to_address: str):  # 超时raise Timeout
             await smtp_client.send_message(msg, recipients=to_address, timeout=6)
     except SMTPTimeoutError:
         raise TimeoutError
+
+CONFIG_FIELDS = {"sendSms", "sendEmail"}
 
 
 async def set_config(request: Request, key: str, value: str):
