@@ -145,3 +145,8 @@ class NeedBindingResponse(ErrcodeABC):
 class EquipmentWithoutMaintenanceResponse(ErrcodeABC):
     errcode = 100023
     errmsg = '该设备无正在执行的工单'
+
+
+class EquipmentNotInPlanResponse(ErrcodeABC):
+    errcode = 100024
+    errmsg = '该设备不在本次巡检计划中'

@@ -10,8 +10,7 @@ from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, Confl
     InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse, \
     EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse, \
     MissEmailContentResponse, SendEmailTimeoutResponse, AlreadySendEmailResponse, SmsLimitResponse, \
-    SendSmsErrorResponse, \
-    EquipmentWithoutMaintenanceResponse
+    SendSmsErrorResponse, EquipmentWithoutMaintenanceResponse, EquipmentNotInPlanResponse
 from src.views.equipment import get_equipment_id
 from src.meta.exception import SmsLimitException
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
@@ -754,7 +753,7 @@ async def patrol_check(request: Request):
             await cur.execute("UPDATE `patrol_detail` SET `check`=1 WHERE `id`=%s AND `pid`=%s AND `eid`=%s",
                               (pd_id, pid, eid))
             if cur.rowcount == 0:
-                return code_response(ConflictStatusResponse)
+                return code_response(EquipmentNotInPlanResponse)
             await cur.execute("SELECT COUNT(*) FROM `patrol_detail` WHERE `pid`=%s AND `check`=0", pid)
             row = await cur.fetchone()
             if row:
