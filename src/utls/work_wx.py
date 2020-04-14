@@ -94,7 +94,7 @@ async def get_wx_user_info(request: Request, user_id: str):
     patter = search(r'\d+', data['name'])
     if patter:
         work_number = patter.group()
-        data['name'].replace(work_number, '')
+        data['name'] = data['name'].replace(work_number, '')
     else:
         work_number = ''
     return {
@@ -106,13 +106,12 @@ async def get_wx_user_info(request: Request, user_id: str):
 
 
 async def get_wx_user(request: Request, code: str) -> dict or None:
-    # todo rm test
     if platform.system() == 'Darwin':  # for test
         return {
-            'name': 'root',
-            'number': '000',
-            'mobile': '1234',
-            'wx_id': 'www',
+            'name': '邓楠跃',
+            'number': '2370',
+            'mobile': '13532227149',
+            'wx_id': '4BF5E726A4173E6E10EBD34153A93688',
         }
     u_id = await get_wx_user_id(request, code)
     if u_id:
