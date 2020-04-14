@@ -9,7 +9,9 @@ from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, ConflictStatusResponse, \
     InvalidFormFIELDSResponse, InvalidCaptchaResponse, RepetitionOrderIdResponse, InvalidWorkerInformationResponse, \
     EmtpyPatrolPlanResponse, OrderMissContentResponse, DispatchSuccessWithoutSendEmailResponse, \
-    MissEmailContentResponse, SendEmailTimeoutResponse, AlreadySendEmailResponse, SmsLimitResponse, SendSmsErrorResponse
+    MissEmailContentResponse, SendEmailTimeoutResponse, AlreadySendEmailResponse, SmsLimitResponse, \
+    SendSmsErrorResponse, \
+    EquipmentWithoutMaintenanceResponse
 from src.views.equipment import get_equipment_id
 from src.meta.exception import SmsLimitException
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
@@ -492,8 +494,9 @@ async def fix(request: Request):  # data { name, phone, remark }
     return code_response(ResponseOk)
 
 
+# 因为weui没有评分组件，所以现在不做评分了
 @routes.patch('/appraisal')
-async def appraisal(request: Request):
+async def appraisal(request: Request):  # data { name, phone, rank, remark, captcha }
     """ E -> F 评分，结束工单 """
     _oid = get_maintenance_id(request)
     try:
@@ -526,7 +529,7 @@ async def appraisal(request: Request):
 
 
 @routes.patch('/cancel')
-async def cancel(request: Request):  # data { name, phone, remark, captcha }
+async def cancel(request: Request):  # data { name, phone, remark }
     """ *(E/F) -> C 取消工单 """
     _oid = get_maintenance_id(request)
     _eid = get_equipment_id(request)
@@ -536,35 +539,31 @@ async def cancel(request: Request):  # data { name, phone, remark, captcha }
     try:
         _edit = data['name']
         _phone = data['phone']
-        _captcha = data['captcha']
         _content = "{time} {name}({phone}) 已取消工单".format(
             time=_time_str, name=_edit, phone=_phone,
         )
     except KeyError:
         return code_response(InvalidFormFIELDSResponse)
-    if await check_sms_captcha(request, _eid, _phone, _captcha):
-        async with request.app['mysql'].acquire() as conn:
-            async with conn.cursor() as cur:
-                # 更新order
-                m_cmd = f"UPDATE {TABLE_NAME} SET `status`='C', `content`=%s WHERE `id`=%s AND `status` NOT IN ('E', 'F')"
-                await cur.execute(m_cmd, (_content, _oid))
-                if cur.rowcount == 0:
-                    return code_response(ConflictStatusResponse)
-                # 更新equipment
-                await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=0", (_edit, _eid))
-                if cur.rowcount == 0:
-                    return code_response(ConflictStatusResponse)
-                await handle_order_history(cur, _oid, 'C', _edit, _phone, data.get('remark'), _content)
-                # await cur.execute(H_CMD, (_oid, 'C', _edit, _phone, data.get('remark'), _content))
-                await handle_equipment_history(cur, _eid, _edit, '{} {} 取消工单'.format(_time_str, _edit))
-                # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
-                #                   (_eid,
-                #                    '{} {} 取消工单'.format(_time_str, _edit),
-                #                    _edit))
-                await conn.commit()
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            # 更新order
+            m_cmd = f"UPDATE {TABLE_NAME} SET `status`='C', `content`=%s WHERE `id`=%s AND `status` NOT IN ('E', 'F')"
+            await cur.execute(m_cmd, (_content, _oid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            # 更新equipment
+            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_edit, _eid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            await handle_order_history(cur, _oid, 'C', _edit, _phone, data.get('remark'), _content)
+            # await cur.execute(H_CMD, (_oid, 'C', _edit, _phone, data.get('remark'), _content))
+            await handle_equipment_history(cur, _eid, _edit, '{} {} 取消工单'.format(_time_str, _edit))
+            # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
+            #                   (_eid,
+            #                    '{} {} 取消工单'.format(_time_str, _edit),
+            #                    _edit))
+            await conn.commit()
         return code_response(ResponseOk)
-    else:
-        return code_response(InvalidCaptchaResponse)
 
 
 PATROL_TABLE = "patrol_meta"
@@ -904,3 +903,28 @@ DESC LIMIT 20\
                 })
             await conn.commit()
         return code_response(ResponseOk, res)
+
+
+@routes.get("/getMaintenance")
+async def get_maintenance_by_equipment(request: Request):
+    eid = get_equipment_id(request)
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """\
+                SELECT `id`, `order_id`, `status` 
+                FROM `order` 
+                WHERE `eid`=%s AND `status`!='F' 
+                ORDER BY `id` DESC LIMIT 1""",
+                eid)
+            row = await cur.fetchone()
+            if row:
+                data = {
+                    'oid': ItHashids.encode(row[0]),
+                    'orderId': row[1],
+                    'status': row[2]
+                }
+                await conn.commit()
+                return code_response(ResponseOk, data)
+            else:
+                return code_response(EquipmentWithoutMaintenanceResponse)

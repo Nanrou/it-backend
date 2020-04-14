@@ -141,3 +141,7 @@ class NeedBindingResponse(ErrcodeABC):
     errcode = 100022
     errmsg = '请先进行绑定或注册'
 
+
+class EquipmentWithoutMaintenanceResponse(ErrcodeABC):
+    errcode = 100023
+    errmsg = '该设备无正在执行的工单'
