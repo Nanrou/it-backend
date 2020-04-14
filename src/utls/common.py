@@ -327,8 +327,7 @@ async def get_config(request: Request, key: str):
     else:
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
-                cmd = "SELECT `value` from `it_config` where `key=%s`"
-                await cur.execute(cmd, (key,))
+                await cur.execute("SELECT `value` FROM `it_config` WHERE `key`=%s", key)
                 row = await cur.fetchone()
                 if row:
                     _config = row[0]
