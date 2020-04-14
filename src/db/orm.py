@@ -35,7 +35,7 @@ class Profile(ModelBase):
     email:             邮箱地址，派工维修的时候再设为必填
     wx_id:             企业微信的user id
     """
-    username = CharField(max_length=16)
+    username = CharField(max_length=16, unique=True)
     work_number = CharField(max_length=8)
     name = CharField(max_length=16)
     department = CharField(max_length=32, null=True)

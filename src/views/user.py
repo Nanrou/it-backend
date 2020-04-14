@@ -11,7 +11,7 @@ from src.meta.permission import Permission
 from src.meta.response_code import InvalidUserDataResponse, ResponseOk, InvalidOriginPasswordResponse, \
     RepetitionUserResponse, InvalidFormFIELDSResponse, MissRequiredFieldsResponse, PrivacyWarningResponse, \
     NeedBindingResponse
-from src.utls.common import verify_login, set_config, dict_to_object, CONFIG_FIELDS
+from src.utls.common import verify_login, set_config, dict_to_object, CONFIG_FIELDS, update_token
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
 from src.utls.work_wx import get_wx_user, handle_jsapi_config
 
@@ -51,7 +51,9 @@ async def return_user_and_token_unregister(request: Request, user, resp):
         'name': user['name'],
         'number': user['number'],
         'dep': '',
+        'rol': 0,
         'pho': user['mobile'],
+        'email': '',
         'iat': round(datetime.now().timestamp()),
         'exp': round((datetime.now() + timedelta(hours=24)).timestamp())
     }, request.app['config']['jwt-secret'], algorithm='HS256').decode('utf-8')
@@ -93,7 +95,7 @@ async def wx_login(request: Request):
         async with request.app['mysql'].acquire() as conn:
             async with conn.cursor() as cur:
                 # wx id和name都在库中，代表已注册过了
-                await cur.execute("SELECT * FROM profile WHERE name=%s AND wx_id=%s", (user['name'], user['wx_id']))
+                await cur.execute("SELECT * FROM `profile` WHERE name=%s AND wx_id=%s", (user['name'], user['wx_id']))
                 row = await cur.fetchone()
                 await conn.commit()
                 if row:
@@ -170,16 +172,20 @@ async def logout(request: Request):
     return code_response(ResponseOk)
 
 
+# todo 要对没绑定的做个判断，引去注册
 @routes.get('/alive')
 async def alive(request: Request):
     # uid 是藏在jwt中的
-    return code_response(ResponseOk, {
-        'name': request['jwt_content']['name'],
-        'department': request['jwt_content']['dep'],
-        'role': request['jwt_content']['rol'],
-        'phone': request['jwt_content']['pho'],
-        'email': request['jwt_content']['email'],
-    })
+    if 'uid' in request['jwt_content']:
+        return code_response(ResponseOk, {
+            'name': request['jwt_content']['name'],
+            'department': request['jwt_content']['dep'],
+            'role': request['jwt_content']['rol'],
+            'phone': request['jwt_content']['pho'],
+            'email': request['jwt_content']['email'],
+        })
+    else:
+        return code_response(NeedBindingResponse)
 
 
 @routes.patch('/change_password')
