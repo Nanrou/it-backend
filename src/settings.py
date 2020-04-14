@@ -32,6 +32,7 @@ def get_config(path):
         else:
             res["mysql"] = tmp["pro-mysql"]
             res["redis"] = tmp["pro-redis"]
+        # res["redis"] = tmp["local-redis"]
     return res
 
 

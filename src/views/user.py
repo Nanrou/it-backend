@@ -172,7 +172,6 @@ async def logout(request: Request):
     return code_response(ResponseOk)
 
 
-# todo 要对没绑定的做个判断，引去注册
 @routes.get('/alive')
 async def alive(request: Request):
     # uid 是藏在jwt中的

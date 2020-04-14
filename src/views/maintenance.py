@@ -477,7 +477,7 @@ async def fix(request: Request):  # data { name, phone, remark }
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
             # 更新equipment
-            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=0", (_edit, _eid))
+            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_edit, _eid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
             await handle_order_history(cur, _oid, 'E', _edit, _phone, data.get('remark'), _content)
@@ -895,7 +895,7 @@ DESC LIMIT 20\
                     'oid': ItHashids.encode(row[0]),
                     'orderId': row[1],
                     'status': row[2],
-                    'eid': row[3],
+                    'eid': ItHashids.encode(row[3]),
                     'equipment': row[4],
                     'department': row[5],
                     'reason': row[6],
