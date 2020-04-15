@@ -24,4 +24,5 @@ PyYAML==5.2
 qrcode==6.1
 six==1.13.0
 Werkzeug==1.0.1
+XlsxWriter==1.2.8
 yarl==1.4.2

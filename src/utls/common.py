@@ -112,15 +112,19 @@ def get_host_ip():
     return ip[0]
 
 
-if platform.system() == 'Darwin':
-    HOST = '{}:8082'.format(get_host_ip())
-else:
-    HOST = 'it.aquazhuhai.com'
+# if platform.system() == 'Darwin':
+#     HOST = '{}:8082'.format(get_host_ip())
+# else:
+HOST = 'it.aquazhuhai.com'
+
+
+def get_detail_uri(eid):
+    return f'https://{HOST}/equipment/detail?eid={eid}'
 
 
 def get_qrcode(eid):
     """ 生成二维码 """
-    return qrcode_make('https://{}/equipment/detail?eid={}'.format(HOST, eid), box_size=5)
+    return qrcode_make(get_detail_uri(eid), box_size=5)
 
 
 SMS_REDIS_KEY = 'eid:{eid}:report'
@@ -301,6 +305,7 @@ async def send_email(msg: EmailMessage, to_address: str):  # 超时raise Timeout
     except SMTPTimeoutError:
         raise TimeoutError
 
+
 CONFIG_FIELDS = {"sendSms", "sendEmail"}
 
 
@@ -337,6 +342,7 @@ async def get_config(request: Request, key: str):
                 else:
                     await conn.commit()
 
+
 # cache 版本号+内容缓存 服务端
 
 
@@ -361,4 +367,3 @@ if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(send_ali_sms('13532227149', '123456'))
-

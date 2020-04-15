@@ -1,14 +1,18 @@
 from datetime import datetime
 from io import BytesIO
+from json import JSONDecodeError
+import os
 
 from aiohttp.web import Request, Response
 from pymysql.err import IntegrityError
+from xlsxwriter import Workbook
 
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk, MissRequiredFieldsResponse, MissComputerHardwareResponse, \
     InvalidFormFIELDSResponse, RepetitionHardwareResponse
 from src.utls.toolbox import PrefixRouteTableDef, ItHashids, code_response, get_query_params
-from src.utls.common import set_cache_version, get_cache_version, get_qrcode
+from src.utls.common import set_cache_version, get_cache_version, get_qrcode, get_detail_uri
+from src.settings import DOWNLOAD_DIR
 
 routes = PrefixRouteTableDef('/api/equipment')
 
@@ -198,6 +202,7 @@ async def query_without_pagination(request: Request):
 
     resp = code_response(ResponseOk, data)
     return resp
+
 
 # todo 规整部门，做成树状，有上下级关系
 @routes.get('/options')
@@ -480,7 +485,8 @@ async def update_hardware(request: Request):  # data {key: [new, old]}
     fields = tuple(data.keys())
 
     _edit = request['jwt_content'].get('name')
-    cmd = "UPDATE computer_detail SET {} WHERE eid=%s".format(','.join([f'`{HARDWARE_FIELDS[field]}`=%s' for field in fields]))
+    cmd = "UPDATE computer_detail SET {} WHERE eid=%s".format(
+        ','.join([f'`{HARDWARE_FIELDS[field]}`=%s' for field in fields]))
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(cmd, [data[field][0] for field in fields] + [_eid])
@@ -523,4 +529,37 @@ async def equipment_detail(request: Request):
     return code_response(ResponseOk, res)
 
 
-# todo 清单导出功能
+@routes.post('/output')
+async def equipment_output(request: Request):  # { eids: [] }
+    try:
+        _data = await request.json()
+        _eids = [ItHashids.decode(_eid) for _eid in _data['eids']]
+    except (KeyError, JSONDecodeError):
+        return code_response(InvalidFormFIELDSResponse)
+
+    fn = '{}.xlsx'.format(datetime.now().strftime("%Y%m%d%H%M"))
+    workbook = Workbook(os.path.join(DOWNLOAD_DIR, fn))
+    sheet = workbook.add_worksheet()
+    row = 0
+    for col, v in enumerate(['设备分类', '所属部门', '责任人', '二维码网址']):
+        sheet.write(row, col, v)
+    row += 1
+
+    cmd = """
+    SELECT `category`, `department`, `owner`, `id`
+    FROM `equipment`
+    WHERE `id` IN ({})
+    """.format(','.join(['%s' for _ in _eids]))
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(cmd, _eids)
+            for r in await cur.fetchall():
+                for col, v in enumerate(r):
+                    if col + 1 == len(r):  # 对id做处理
+                        sheet.write(row, col, get_detail_uri(ItHashids.encode(v)))
+                    else:
+                        sheet.write(row, col, v)
+                row += 1
+            await conn.commit()
+    workbook.close()
+    return code_response(ResponseOk, {'uri': f'/api/download/{fn}', 'name': fn})
