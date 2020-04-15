@@ -91,18 +91,19 @@ async def get_wx_user_info(request: Request, user_id: str):
         'userid': user_id,
     })
     # 分割姓名和工号
-    patter = search(r'\d+', data['name'])
-    if patter:
-        work_number = patter.group()
-        data['name'] = data['name'].replace(work_number, '')
-    else:
-        work_number = ''
-    return {
-        'name': data['name'],
-        'number': work_number,
-        'mobile': data['mobile'],
-        'wx_id': user_id,
-    }
+    if data:
+        patter = search(r'\d+', data['name'])
+        if patter:
+            work_number = patter.group()
+            data['name'] = data['name'].replace(work_number, '')
+        else:
+            work_number = ''
+        return {
+            'name': data['name'],
+            'number': work_number,
+            'mobile': data['mobile'],
+            'wx_id': user_id,
+        }
 
 
 async def get_wx_user(request: Request, code: str) -> dict or None:
