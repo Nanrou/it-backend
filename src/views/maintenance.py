@@ -102,7 +102,7 @@ async def query(request: Request):
             await conn.commit()
 
     resp = code_response(ResponseOk, {
-        'totalPage': total_page,
+        'totalPage': total_page or 1,  # 为0的时候前端会有问题
         'tableData': data
     })
     resp.set_cookie(f'{KEY_OF_VERSION}-version', await get_cache_version(request, KEY_OF_VERSION))
