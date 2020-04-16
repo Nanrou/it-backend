@@ -51,7 +51,7 @@ async def query(request: Request):
     # 对过滤项进行组合处理
     for type_, col_format in zip(
             ['department', 'equipment', 'status'],
-            ['department="{}"', 'category="{}"', 'status="{}"']  # 注意这里，equipment的status是int，maintenance是string
+            ['department="{}"', 'equipment="{}"', 'status="{}"']  # 注意这里，equipment的status是int，maintenance是string
     ):
         if request.query.get(type_):
             _tmp = []
