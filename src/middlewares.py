@@ -52,7 +52,7 @@ MODULE_PERMISSION = {
 
 @middleware
 async def verify_jwt_token(request: Request, handler):
-    if any([request.path == path and request.method == method for path, method in WITHOUT_VERIFY]):
+    if any([request.path.startswith(path) and request.method == method for path, method in WITHOUT_VERIFY]):
         resp = await handler(request)
         return resp
 

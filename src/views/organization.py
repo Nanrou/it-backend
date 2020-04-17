@@ -14,11 +14,11 @@ KEY_OF_VERSION = 'organization'
 async def query(request: Request):
     """ relation的cache分两类，无后缀的是全局，细分的话后缀是部门 """
     # 检查cache，全局是局部的充分条件
-    if request['jwt_content'].get('rol') & Permission.SUPER:
-        pass
-    elif request.cookies.get(f'{KEY_OF_VERSION}-version') and (request.cookies.get(
-            f'{KEY_OF_VERSION}-version') == await get_cache_version(request, KEY_OF_VERSION)):
-        return Response(status=304)
+    # if request['jwt_content'].get('rol') & Permission.SUPER:
+    #     pass
+    # elif request.cookies.get(f'{KEY_OF_VERSION}-version') and (request.cookies.get(
+    #         f'{KEY_OF_VERSION}-version') == await get_cache_version(request, KEY_OF_VERSION)):
+    #     return Response(status=304)
 
     ancestor = request.query.get('ancestor') if request.query.get('ancestor') else 1
 
