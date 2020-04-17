@@ -20,6 +20,7 @@ WITHOUT_VERIFY = [
     ('/api/user/login', 'POST'),
     ('/api/user/logout', 'GET'),
     ('/api/user/wx-login', 'GET'),
+    ('/api/download', 'GET')
     # 以下都是为移动端服务的
     # ('/api/equipment/detail', 'GET'),
     # ('/api/maintenance/report', 'POST'),
