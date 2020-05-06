@@ -294,7 +294,7 @@ role,
 phone,
 email,
 password_hash
-) VALUES (%s, %s, %s, %s, %s, %s, %s)\
+) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)\
 """
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
