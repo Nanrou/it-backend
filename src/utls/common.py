@@ -211,10 +211,12 @@ except KeyError:
     raise RuntimeError('Cant send email without smtp data')
 
 ORDER_TITLE = "{id_}故障工单"
-ORDER_CONTENT = "  {content}，请及时处理。处理验证码为：{captcha}"
+# ORDER_CONTENT = "  {content}，请及时处理。处理验证码为：{captcha}"
+ORDER_CONTENT = "  {content}，请及时处理。"
 
 PATROL_TITLE = "{id_}巡检计划"
-PATROL_CONTENT = "有新的巡检计划，合计 {total} 台设备。巡检验证码为：{captcha}"
+# PATROL_CONTENT = "有新的巡检计划，合计 {total} 台设备。巡检验证码为：{captcha}"
+PATROL_CONTENT = "有新的巡检计划，合计 {total} 台设备。"
 
 
 def create_captcha() -> str:  # 生成和更新验证码
@@ -245,7 +247,8 @@ async def send_maintenance_order_email(request, oid: str, case_id: str, captcha:
             row = await cur.fetchone()
             if row:
                 msg['Subject'] = ORDER_TITLE.format(id_=case_id)
-                content = ORDER_CONTENT.format(content=row[0], captcha=captcha)
+                # content = ORDER_CONTENT.format(content=row[0], captcha=captcha)
+                content = ORDER_CONTENT.format(content=row[0])
                 msg.set_content(content)
                 await conn.commit()
             else:  # 没有对应工单的内容
@@ -255,10 +258,10 @@ async def send_maintenance_order_email(request, oid: str, case_id: str, captcha:
             if row and row[0] == '1':
                 await send_email(msg, to_address)
     await store_email_content(request, case_id, to_address, captcha, content)
-    try:  # 重发的时候会重复插入
-        await set_captcha(request, case_id, captcha)
-    except IntegrityError:
-        pass
+    # try:  # 重发的时候会重复插入
+    #     await set_captcha(request, case_id, captcha)
+    # except IntegrityError:
+    #     pass
 
 
 async def send_patrol_email(request, pid: str, case_id: str, captcha: str, to_address: str):
@@ -271,7 +274,8 @@ async def send_patrol_email(request, pid: str, case_id: str, captcha: str, to_ad
             row = await cur.fetchone()
             if row:
                 msg['Subject'] = PATROL_TITLE.format(id_=case_id)
-                content = PATROL_CONTENT.format(total=row[0], captcha=captcha)
+                # content = PATROL_CONTENT.format(total=row[0], captcha=captcha)
+                content = PATROL_CONTENT.format(total=row[0])
                 msg.set_content(content)
                 await conn.commit()
             else:  # 没有对应工单的内容
@@ -281,10 +285,10 @@ async def send_patrol_email(request, pid: str, case_id: str, captcha: str, to_ad
             if row and row[0] == '1':
                 await send_email(msg, to_address)
     await store_email_content(request, case_id, to_address, captcha, content)
-    try:  # 重发的时候会重复插入
-        await set_captcha(request, case_id, captcha)
-    except IntegrityError:
-        pass
+    # try:  # 重发的时候会重复插入
+    #     await set_captcha(request, case_id, captcha)
+    # except IntegrityError:
+    #     pass
 
 
 async def store_email_content(request, case_id, email, captcha, content):

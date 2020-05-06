@@ -28,7 +28,7 @@ ORDER_ID_EXPIRE_TIME = 60 * 60 * 24  # 记录当天的条数 order id 的过期�
 # APPRAISAL_FORM_FIELDS = {'name': 'name', 'phone': 'phone', 'rank': 'rank',
 #                          'remark': 'remark', 'captcha': 'captcha'}
 REPORT_FORM_FIELDS = {'name', 'phone', 'reason', 'remark', 'captcha', 'workNumber'}
-APPRAISAL_FORM_FIELDS = {'name', 'phone', 'rank', 'remark', 'captcha'}
+APPRAISAL_FORM_FIELDS = {'name', 'phone', 'rank', 'remark'}
 REMOTE_HANDLE_FIELDS = {'eid', 'method', 'remark'}
 MAINTENANCE_STATUS = 1
 
@@ -477,54 +477,46 @@ async def fix(request: Request):  # data { name, phone, remark }
             await cur.execute(m_cmd, (_content, _oid))
             if cur.rowcount == 0:
                 return code_response(ConflictStatusResponse)
-            # 更新equipment
-            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_edit, _eid))
-            if cur.rowcount == 0:
-                return code_response(ConflictStatusResponse)
             await handle_order_history(cur, _oid, 'E', _edit, _phone, data.get('remark'), _content)
-            # await cur.execute(H_CMD, (_oid, 'E', _edit, _phone, data.get('remark'), _content))
             await handle_equipment_history(cur, _eid, _edit, '{} {} 修复设备故障'.format(_time_str, _edit))
-            # await cur.execute("INSERT INTO edit_history (eid, content, edit) VALUES (%s, %s, %s)",
-            #                   (_eid,
-            #                    '{} {} 修复设备故障'.format(_time_str, _edit),
-            #                    _edit))
             await conn.commit()
 
     return code_response(ResponseOk)
 
 
-# 因为weui没有评分组件，所以现在不做评分了
 @routes.patch('/appraisal')
-async def appraisal(request: Request):  # data { name, phone, rank, remark, captcha }
+async def appraisal(request: Request):  # data { name, phone, rank, remark }
     """ E -> F 评分，结束工单 """
     _oid = get_maintenance_id(request)
+    _eid = get_equipment_id(request)
     try:
         _appraisal_form = await request.json()
         assert all(k in APPRAISAL_FORM_FIELDS for k in _appraisal_form)
     except (KeyError, AssertionError, JSONDecodeError):
         return code_response(InvalidFormFIELDSResponse)
 
-    if await check_sms_captcha(request, _oid, _appraisal_form['phone'], _appraisal_form['captcha']):
-        _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        _name = _appraisal_form['name']
-        _phone = _appraisal_form['phone']
-        _rank = _appraisal_form['rank']
-        _content = "{time} {name}({phone})对工单打了{rank}分评价".format(
-            time=_time_str, name=_name, phone=_phone, rank=_rank
-        )
-        async with request.app['mysql'].acquire() as conn:
-            async with conn.cursor() as cur:
-                # 更新order
-                m_cmd = f"UPDATE {TABLE_NAME} SET `status`='F', `rank`=%s, `content`=%s WHERE `id`=%s AND `status`='E'"
-                await cur.execute(m_cmd, (_rank, _content, _oid))
-                if cur.rowcount == 0:
-                    return code_response(ConflictStatusResponse)
-                await handle_order_history(cur, _oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content)
-                # await cur.execute(H_CMD, (_oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content))
-                await conn.commit()
-        return code_response(ResponseOk)
-    else:
-        return code_response(InvalidCaptchaResponse)
+    _time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    _name = _appraisal_form['name']
+    _phone = _appraisal_form['phone']
+    _rank = _appraisal_form['rank']
+    _content = "{time} {name}({phone})对工单打了{rank}分评价".format(
+        time=_time_str, name=_name, phone=_phone, rank=_rank
+    )
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            # 更新order
+            m_cmd = f"UPDATE {TABLE_NAME} SET `status`='F', `rank`=%s, `content`=%s WHERE `id`=%s AND `status`='E'"
+            await cur.execute(m_cmd, (_rank, _content, _oid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            await handle_order_history(cur, _oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content)
+            # await cur.execute(H_CMD, (_oid, 'F', _name, _phone, _appraisal_form.get('remark'), _content))
+            # 更新equipment
+            await cur.execute("UPDATE equipment SET status=0, edit=%s WHERE id=%s AND status=1", (_name, _eid))
+            if cur.rowcount == 0:
+                return code_response(ConflictStatusResponse)
+            await conn.commit()
+    return code_response(ResponseOk)
 
 
 @routes.patch('/cancel')
