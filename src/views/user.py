@@ -190,16 +190,16 @@ async def alive(request: Request):
 @routes.patch('/changePassword')
 async def change_password(request: Request):
     data = await request.json()
+    _uid = get_jwt_user_id(request)
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
-            uid = ItHashids.decode(request['jwt_content'].get('uid'))
             await cur.execute(
-                "SELECT * FROM profile WHERE id=%s", uid)
+                "SELECT * FROM profile WHERE id=%s", _uid)
             r = await cur.fetchone()
             await conn.commit()
             if r and check_password_hash(r[-3], data.get('originPassword')):
                 await cur.execute('UPDATE profile SET password_hash=%s WHERE id=%s',
-                                  (generate_password_hash(data.get('newPassword')), uid))
+                                  (generate_password_hash(data.get('newPassword')), _uid))
                 await conn.commit()
                 return code_response(ResponseOk)
             else:
@@ -260,19 +260,21 @@ def get_jwt_user_id(request: Request):
 
 @routes.patch('/resetPassword')
 async def reset_password(request: Request):
-    _uid = get_jwt_user_id(request)
-    data = await request.json()
+    _uid = get_user_id(request)
+    # data = await request.json()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
+            # await cur.execute('UPDATE profile SET password_hash=%s WHERE id=%s',
+            #                   (generate_password_hash(data.get('password') or "8888"), _uid))
             await cur.execute('UPDATE profile SET password_hash=%s WHERE id=%s',
-                              (generate_password_hash(data.get('password') or "8888"), _uid))
+                              (generate_password_hash("8888"), _uid))
             await conn.commit()
     return code_response(ResponseOk)
 
 
 @routes.patch('/permission')
 async def update_permission(request: Request):
-    _uid = get_jwt_user_id(request)
+    _uid = get_user_id(request)
     data = await request.json()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
