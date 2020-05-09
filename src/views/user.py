@@ -187,7 +187,7 @@ async def alive(request: Request):
         return code_response(NeedBindingResponse)
 
 
-@routes.patch('/change_password')
+@routes.patch('/changePassword')
 async def change_password(request: Request):
     data = await request.json()
     async with request.app['mysql'].acquire() as conn:
@@ -257,7 +257,7 @@ def get_jwt_user_id(request: Request):
     return ItHashids.decode(request['jwt_content']['uid'])
 
 
-@routes.patch('/reset_password')
+@routes.patch('/resetPassword')
 async def reset_password(request: Request):
     _uid = get_jwt_user_id(request)
     data = await request.json()
