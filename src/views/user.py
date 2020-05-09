@@ -192,13 +192,14 @@ async def change_password(request: Request):
     data = await request.json()
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
+            uid = ItHashids.decode(request['jwt_content'].get('uid'))
             await cur.execute(
-                "SELECT * FROM profile WHERE id=%s", (request['jwt_content'].get('uid'),))
+                "SELECT * FROM profile WHERE id=%s", uid)
             r = await cur.fetchone()
             await conn.commit()
             if r and check_password_hash(r[-3], data.get('originPassword')):
                 await cur.execute('UPDATE profile SET password_hash=%s WHERE id=%s',
-                                  (generate_password_hash(data.get('newPassword')), request['jwt_content'].get('uid')))
+                                  (generate_password_hash(data.get('newPassword')), uid))
                 await conn.commit()
                 return code_response(ResponseOk)
             else:
