@@ -2,7 +2,7 @@ from aiohttp.web import Request, Response
 
 from src.meta.permission import Permission
 from src.meta.response_code import ResponseOk
-from src.utls.toolbox import PrefixRouteTableDef, Tree, code_response, get_query_params
+from src.utls.toolbox import PrefixRouteTableDef, Tree, code_response, get_query_params, ItHashids
 from src.utls.common import set_cache_version, get_cache_version
 
 routes = PrefixRouteTableDef('/api/organization')
@@ -32,7 +32,7 @@ async def query(request: Request):
 async def add(request: Request):
     tree = Tree(pool=request.app['mysql'])
     data = await request.json()
-    await tree.add_node(data['label'], data['parentId'])
+    await tree.add_node(data['label'], ItHashids.decode(data['parentId']))
     await set_cache_version(request, KEY_OF_VERSION)
     return code_response(ResponseOk)
 
