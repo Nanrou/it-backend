@@ -35,12 +35,13 @@ EQUIPMENT_FIELDS = {
 }
 HARDWARE_FIELDS = {
     # 'eid',
-    'ipAddress': 'ip_address',
+    'ip': 'ip_address',
     'cpu': 'cpu',
     'gpu': 'gpu',
     'disk': 'disk',
     'memory': 'memory',
     'mainBoard': 'main_board',
+    'monitor': 'monitor',
     'remark': 'remark',
 }
 StatusText = {
@@ -423,13 +424,14 @@ async def query_hardware(request: Request):
                 data = {
                     # 'hid': row[0],
                     # 'eid': row[1],
-                    'ipAddress': row[2],
+                    'ip': row[2],
                     'cpu': row[3],
                     'gpu': row[4],
                     'disk': row[5],
                     'memory': row[6],
                     'mainBoard': row[7],
-                    'remark': row[8]
+                    'monitor': row[8],
+                    'remark': row[9]
                 }
             except (IndexError, TypeError):
                 return code_response(MissComputerHardwareResponse)
@@ -453,18 +455,20 @@ async def create_hardware(request: Request):
         disk,
         `memory`,
         main_board,
+        `monitor`,
         remark
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)\
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)\
     """
             try:
                 await cur.execute(_cmd, (
                     _eid,
-                    data.get('ipAddress'),
+                    data.get('ip'),
                     data.get('cpu'),
                     data.get('gpu'),
                     data.get('disk'),
                     data.get('memory'),
                     data.get('main_board'),
+                    data.get('monitor'),
                     data.get('remark')
                 ))
             except IntegrityError:

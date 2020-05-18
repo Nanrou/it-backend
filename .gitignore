@@ -114,3 +114,4 @@ src/db/migration.py
 src/meta/departments.json
 src/meta/rename_department.json
 src/download/
+src/users

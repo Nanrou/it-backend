@@ -138,6 +138,7 @@ class ComputerDetail(ModelBase):
     disk:                硬盘
     memory:              内存
     main_board:          主板
+    monitor:             显示器  # todo
     remark:              备注
 
     del_flag:            删除标记
@@ -149,6 +150,7 @@ class ComputerDetail(ModelBase):
     disk = CharField(max_length=32, null=True)
     memory = CharField(max_length=32, null=True)
     main_board = CharField(max_length=32, null=True)
+    monitor = CharField(max_length=32, null=True)
     remark = CharField(max_length=128, null=True)
 
     del_flag = BooleanField(constraints=[SQL('DEFAULT 0')])
@@ -325,6 +327,8 @@ class PatrolDetail(ModelBase):
             (('pid',), False),
         )
 
+# todo 部门管理员信息
+
 
 ALL_TABLES = [Profile, Equipment, EditHistory, ComputerDetail, WorkOrder, OrderHistory, ItConfig, CaptchaMeta,
               EmailHistory, PatrolMeta, PatrolDetail]
@@ -338,6 +342,8 @@ if __name__ == '__main__':
     # ItConfig.insert({ItConfig.key: "sendEmail", ItConfig.value: "0"}).execute()
     # MySQL_DB.drop_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
     # MySQL_DB.create_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
-    MySQL_DB.drop_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
-    MySQL_DB.create_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
+    # MySQL_DB.drop_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
+    # MySQL_DB.create_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
+    MySQL_DB.drop_tables([ComputerDetail])
+    MySQL_DB.create_tables([ComputerDetail])
     pass
