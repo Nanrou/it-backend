@@ -416,3 +416,55 @@ async def update_profile(request: Request):  # {key, value}
                               (data['newValue'], _uid))
             await conn.commit()
     return code_response(ResponseOk)
+
+
+@routes.patch('/updateDepartmentContact')
+async def set_department_contact(request: Request):
+    """ 设置单个部门的联系人信息 """
+    try:
+        data = await request.json()
+        did = ItHashids.decode(data['did'])
+        pid = ItHashids.decode(data['pid'])
+        assert all(k in data for k in ['did', 'pid'])
+    except (AssertionError, AttributeError, JSONDecodeError):
+        return code_response(InvalidFormFIELDSResponse)
+
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE `department_contact` SET `pid`=%s WHERE `did`=%s",
+                              (pid, did))
+            if cur.rowcount == 0:
+                await cur.execute("INSERT INTO `department_contact` (`did`, `pid`) VALUES (%s, %s)",
+                                  (did, pid))
+            await conn.commit()
+    return code_response(ResponseOk)
+
+
+@routes.get('/getDepartmentContact')
+async def get_department_contact(request: Request):
+    """ 获取单个部门的联系人信息 """
+    try:
+        did = ItHashids.decode(request.query['did'])
+    except KeyError:
+        return code_response(InvalidFormFIELDSResponse)
+
+    cmd = f"""\
+    SELECT a.did, a.pid, b.name, b.phone
+    FROM `department_contact` a 
+    JOIN `profile` b ON a.pid = b.id
+    WHERE a.did = %s
+"""
+    res = {
+        'name': '',
+        'phone': '',
+    }
+    async with request.app['mysql'].acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(cmd, did)
+            row = await cur.fetchone()
+            if row:
+                res['name'] = row[2]
+                res['phone'] = row[3]
+            await conn.commit()
+
+    return code_response(ResponseOk, res)

@@ -288,6 +288,8 @@ class PatrolMeta(ModelBase):
     total:                  计划内的设备总数
     status:                 0 进行中，1 已完成，2已取消
     unfinished:             未完成的数量，每次check都会更新这个数
+    start_time:             计划开始时间
+    end_time:               计划结束时间
     """
     patrol_id = CharField(max_length=12)
     pid = IntegerField()
@@ -327,11 +329,25 @@ class PatrolDetail(ModelBase):
             (('pid',), False),
         )
 
-# todo 部门管理员信息
+
+class DepartmentContact(ModelBase):
+    """
+    部门的联系人
+    did:               department meta对应的id
+    pid:               profile对应的id
+    """
+    did = CharField(max_length=16)
+    pid = CharField(max_length=16, null=True)
+
+    class Meta:
+        table_name = 'department_contact'
+        indexes = (
+            (('did',), True),
+        )
 
 
 ALL_TABLES = [Profile, Equipment, EditHistory, ComputerDetail, WorkOrder, OrderHistory, ItConfig, CaptchaMeta,
-              EmailHistory, PatrolMeta, PatrolDetail]
+              EmailHistory, PatrolMeta, PatrolDetail, DepartmentContact]
 
 if __name__ == '__main__':
     # MySQL_DB.drop_tables([WorkOrder, OrderHistory])
@@ -344,6 +360,11 @@ if __name__ == '__main__':
     # MySQL_DB.create_tables([OrderHistory, WorkOrder, CaptchaMeta, EmailHistory, PatrolMeta, PatrolDetail])
     # MySQL_DB.drop_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
     # MySQL_DB.create_tables([PatrolMeta, PatrolDetail, EmailHistory, CaptchaMeta])
-    MySQL_DB.drop_tables([ComputerDetail])
-    MySQL_DB.create_tables([ComputerDetail])
+    # MySQL_DB.drop_tables([ComputerDetail])
+    # MySQL_DB.create_tables([ComputerDetail])
+    _tables = [
+        DepartmentContact,
+    ]
+    MySQL_DB.drop_tables(_tables)
+    MySQL_DB.create_tables(_tables)
     pass
