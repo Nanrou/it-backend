@@ -296,6 +296,8 @@ class PatrolMeta(ModelBase):
     total = IntegerField()
     unfinished = IntegerField()
     status = TinyInt(constraints=[SQL('DEFAULT 0')])
+    start_time = CharField()
+    end_time = CharField()
 
     del_flag = BooleanField(constraints=[SQL('DEFAULT 0')])
     gmt_modified = DateTimeField(formats='%Y-%m-%d %H:%M:%S',
@@ -363,7 +365,9 @@ if __name__ == '__main__':
     # MySQL_DB.drop_tables([ComputerDetail])
     # MySQL_DB.create_tables([ComputerDetail])
     _tables = [
-        DepartmentContact,
+        # DepartmentContact,
+        PatrolMeta,
+        PatrolDetail
     ]
     MySQL_DB.drop_tables(_tables)
     MySQL_DB.create_tables(_tables)

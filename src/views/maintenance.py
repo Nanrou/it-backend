@@ -590,6 +590,8 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
         _eids = [ItHashids.decode(_eid) for _eid in _data['eids']]
         _pid = ItHashids.decode(_data['pid'])
         _email = _data['email']
+        _start_time = _data['startTime']
+        _end_time = _data['endTime']
     except (KeyError, AssertionError, JSONDecodeError):
         return code_response(InvalidFormFIELDSResponse)
 
@@ -600,8 +602,10 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
             patrol_id,
             pid,
             total,
-            unfinished
-        ) VALUES (%s, %s, %s, %s)\
+            unfinished,
+            start_time,
+            end_time
+        ) VALUES (%s, %s, %s, %s, %s, %s)\
 """
     d_cmd = """
         INSERT INTO `patrol_detail` (
@@ -613,7 +617,7 @@ async def create_patrol(request: Request):  # { pid: str, eids: [] }
     async with request.app['mysql'].acquire() as conn:
         async with conn.cursor() as cur:
             try:
-                await cur.execute(m_cmd, (_patrol_id, _pid, len(_eids), len(_eids)))
+                await cur.execute(m_cmd, (_patrol_id, _pid, len(_eids), len(_eids), _start_time, _end_time))
             except IntegrityError:
                 return code_response(RepetitionOrderIdResponse)
             _last_row_id = cur.lastrowid
@@ -631,7 +635,7 @@ async def get_patrol_plan(request: Request):
         return code_response(MissRequiredFieldsResponse)
 
     cmd = f"""\
-    SELECT a.id, a.patrol_id, b.name, a.total, a.status, a.unfinished
+    SELECT a.id, a.patrol_id, b.name, a.total, a.status, a.unfinished, a.start_time, a.end_time
     FROM {PATROL_TABLE} a 
     JOIN `profile` b ON a.pid = b.id
     WHERE a.del_flag = 0
@@ -656,6 +660,8 @@ async def get_patrol_plan(request: Request):
                     'total': row[3],
                     'status': row[4],
                     'unfinished': row[5],
+                    'startTime': row[6],
+                    'endTime': row[7],
                 })
             await conn.commit()
 
